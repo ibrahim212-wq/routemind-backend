@@ -1,0 +1,12 @@
+{
+  "JAM_SCALE": 10.0,
+  "BIN_THRESH": 0.2,
+  "SEQUENCE_LENGTH": 12,
+  "PREDICTION_HORIZONS": [
+    1,
+    2,
+    4
+  ],
+  "N_CLASSES": 2,
+  "NODE_FEATURE_DIM": 16
+}
