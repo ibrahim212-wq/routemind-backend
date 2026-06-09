@@ -6,6 +6,7 @@ Loads all model artifacts once at startup and keeps them in memory.
 import os
 import pickle
 import json
+import logging
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,25 +14,28 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from pathlib import Path
 
-# ── Config (must match training config exactly) ──────────────────────────────
+logger = logging.getLogger("routemind.loader")
+
+# ── Config ────────────────────────────────────────────────────────────────────
 class Config:
-    JAM_SCALE          = 10.0
-    BIN_THRESH         = 0.2       # jam >= 0.2 → CONGESTED
-    SEQUENCE_LENGTH    = 12
-    PREDICTION_HORIZONS = [1, 2, 4]  # +15, +30, +60 min
-    NODE_FEATURE_DIM   = 16
-    GCN_HIDDEN_DIM     = 64
-    GCN_OUTPUT_DIM     = 32
-    LSTM_HIDDEN_DIM    = 128
-    LSTM_LAYERS        = 2
-    DECISION_HIDDEN    = 256
-    N_CLASSES          = 2
-    DROPOUT            = 0.3
-    DEVICE             = torch.device("cpu")  # Cloud Run uses CPU
+    JAM_SCALE           = 10.0
+    BIN_THRESH          = 0.2
+    SEQUENCE_LENGTH     = 12
+    PREDICTION_HORIZONS = [1, 2, 4]   # +15, +30, +60 min
+    NODE_FEATURE_DIM    = 16
+    GCN_HIDDEN_DIM      = 64
+    GCN_OUTPUT_DIM      = 32
+    LSTM_HIDDEN_DIM     = 128
+    LSTM_LAYERS         = 2
+    DECISION_HIDDEN     = 256
+    N_CLASSES           = 2
+    DROPOUT             = 0.3
+    DEVICE              = torch.device("cpu")
 
     ARTIFACTS_DIR = Path(os.getenv("ARTIFACTS_DIR", "./artifacts"))
 
-# ── Model Architecture (same as training) ────────────────────────────────────
+
+# ── Model Architecture ────────────────────────────────────────────────────────
 class GCNBlock(nn.Module):
     def __init__(self, in_dim, hid_dim, out_dim, dropout=0.3):
         super().__init__()
@@ -85,57 +89,94 @@ class RouteMindModel(nn.Module):
         return self.reg_head(h), self.cls_head(h)
 
 
-# ── Singleton Loader ─────────────────────────────────────────────────────────
+# ── Singleton Loader ──────────────────────────────────────────────────────────
 class ModelLoader:
-    _model        = None
-    _scaler       = None
-    _hist_lookup  = None
-    _meta         = None
-    _edge_index   = None
-    _edge_weight  = None
-    _feature_cols = None
-    _prophet_feats= None
-    _cfg          = Config()
-    _loaded       = False
+    _model          = None
+    _scaler         = None
+    _hist_lookup    = None
+    _meta           = None    # 460 real junctions — للـ backward compatibility
+    _combined_meta  = None    # 2076 (real + virtual) — للـ upstream discovery
+    _edge_index     = None    # travel_time_graph edges
+    _edge_weight    = None    # travel_time بالثواني
+    _feature_cols   = None
+    _prophet_feats  = None
+    _cfg            = Config()
+    _loaded         = False
 
     @classmethod
     def load(cls):
         import pandas as pd
         d = cls._cfg.ARTIFACTS_DIR
 
-        # 1. Junction metadata
+        # ── 1. Junction metadata (460 real) ──────────────────────────
         cls._meta = pd.read_csv(d / "junction_meta.csv")
-        N = len(cls._meta)
+        N_real = len(cls._meta)
+        logger.info(f"Real junctions loaded: {N_real}")
 
-        # 2. Feature columns
+        # ── 2. Combined metadata (real + virtual) ────────────────────
+        combined_path = d / "combined_meta.csv"
+        if combined_path.exists():
+            cls._combined_meta = pd.read_csv(combined_path)
+            logger.info(f"Combined junctions loaded: {len(cls._combined_meta)}")
+        else:
+            # Fallback: بس الـ real junctions
+            cls._combined_meta = cls._meta.copy()
+            cls._combined_meta["junction_type"] = "real"
+            cls._combined_meta["road_name"]     = ""
+            logger.warning("combined_meta.csv مش موجود — هنستخدم real junctions بس")
+
+        # ── 3. Feature columns ────────────────────────────────────────
         with open(d / "feature_cols.json") as f:
             cls._feature_cols = json.load(f)
 
-        # 3. Scaler
+        # ── 4. Scaler ─────────────────────────────────────────────────
         with open(d / "scaler.pkl", "rb") as f:
             cls._scaler = pickle.load(f)
 
-        # 4. Historical lookup (Tier 1)
+        # ── 5. Historical lookup (Tier 1) ─────────────────────────────
         with open(d / "historical_lookup.pkl", "rb") as f:
             data = pickle.load(f)
             cls._hist_lookup = data["lookup"]
 
-        # 5. Graph
-        graph = torch.load(d / "junction_graph.pt", map_location="cpu")
-        cls._edge_index = graph["edge_index"]
-        cls._edge_weight = graph["edge_weight"]
+        # ── 6. Graph ──────────────────────────────────────────────────
+        # الأولوية: travel_time_graph.pt (الجديد) → junction_graph.pt (القديم)
+        tt_graph_path  = d / "travel_time_graph.pt"
+        old_graph_path = d / "junction_graph.pt"
 
-        # 6. Prophet features
+        if tt_graph_path.exists():
+            graph = torch.load(tt_graph_path, map_location="cpu")
+            cls._edge_index  = graph["edge_index"]
+            cls._edge_weight = graph["edge_weight"]   # travel_time بالثواني
+            logger.info(
+                f"Travel-time graph loaded: "
+                f"{graph['n_nodes']} nodes, "
+                f"{cls._edge_index.shape[1]} edges"
+            )
+        else:
+            # Fallback: الـ correlation graph القديم
+            graph = torch.load(old_graph_path, map_location="cpu")
+            cls._edge_index  = graph["edge_index"]
+            cls._edge_weight = graph["edge_weight"]
+            logger.warning(
+                "travel_time_graph.pt مش موجود — "
+                "هنستخدم junction_graph.pt (correlation-based)"
+            )
+
+        # ── 7. Prophet features ───────────────────────────────────────
         raw = np.load(d / "prophet_features.npz", allow_pickle=True)
         cls._prophet_feats = {k: raw[k].item() for k in raw.files}
 
-        # 7. LSTM Model (Tier 2)
-        cls._model = RouteMindModel(N, cls._cfg)
+        # ── 8. LSTM Model (Tier 2) ────────────────────────────────────
+        # الموديل اتتدرب على N_real=460 — ما نغيّرش ده
+        cls._model = RouteMindModel(N_real, cls._cfg)
         ckpt = torch.load(d / "routemind_model.pth", map_location="cpu")
         cls._model.load_state_dict(ckpt["model_state_dict"])
         cls._model.eval()
 
         cls._loaded = True
+        logger.info("✅ All artifacts loaded")
+
+    # ── Getters ───────────────────────────────────────────────────────────────
 
     @classmethod
     def is_loaded(cls) -> bool:
@@ -143,7 +184,13 @@ class ModelLoader:
 
     @classmethod
     def get_meta(cls):
+        """460 real junctions — للـ junction_mapper و tier1."""
         return cls._meta
+
+    @classmethod
+    def get_combined_meta(cls):
+        """2076 junctions (real + virtual) — للـ upstream_discovery و scanner."""
+        return cls._combined_meta
 
     @classmethod
     def get_hist_lookup(cls):
@@ -159,6 +206,11 @@ class ModelLoader:
 
     @classmethod
     def get_graph(cls):
+        """
+        يرجع (edge_index, edge_weight).
+        edge_weight = travel_time بالثواني (من travel_time_graph.pt)
+        أو correlation (من junction_graph.pt كـ fallback).
+        """
         return cls._edge_index, cls._edge_weight
 
     @classmethod
