@@ -28,21 +28,23 @@ def init_firebase():
         import firebase_admin
         from firebase_admin import credentials
 
+        # Service-account Certificate credential from Secret Manager. This is the
+        # battle-tested firebase-admin path (key-based JWT bearer exchange), which
+        # — unlike metadata-server ADC — reliably obtains the firebase.messaging
+        # scope required for FCM v1 delivery.
         creds_json = os.environ.get("FIREBASE_CREDENTIALS")
         if creds_json:
-            creds_dict = json.loads(creds_json)
-            cred = credentials.Certificate(creds_dict)
+            cred = credentials.Certificate(json.loads(creds_json))
             firebase_admin.initialize_app(cred)
             logger.info("Firebase initialized from Secret Manager ✓")
             return
 
-        local_path = os.environ.get(
-            "GOOGLE_APPLICATION_CREDENTIALS",
-            "./firebase-service-account.json"
-        )
-        if os.path.exists(local_path):
-            firebase_admin.initialize_app(credentials.Certificate(local_path))
-            logger.info("Firebase initialized from local file ✓")
+        # Explicit key file fallback (only when GOOGLE_APPLICATION_CREDENTIALS is
+        # set) — no implicit default path so a stray bundled key can't load.
+        key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if key_path and os.path.exists(key_path):
+            firebase_admin.initialize_app(credentials.Certificate(key_path))
+            logger.info("Firebase initialized from key file ✓")
             return
 
         logger.warning("Firebase credentials not found — notifications disabled")
@@ -106,7 +108,7 @@ async def test_notify(body: dict):
         if not token:
             return {"status": "error", "reason": f"مفيش FCM token للـ user {user_id}"}
 
-        messaging.send(messaging.Message(
+        message_name = messaging.send(messaging.Message(
             notification=messaging.Notification(
                 title="RouteMind Test 🚦",
                 body="الـ backend شغال وبيبعت notifications ✅",
@@ -128,10 +130,62 @@ async def test_notify(body: dict):
         return {
             "status":        "sent",
             "user_id":       user_id,
+            "message_name":  message_name,
             "token_preview": token[:20] + "...",
         }
 
     except Exception as e:
+        return {"status": "error", "reason": str(e)}
+
+
+@app.post("/api/run-scan")
+async def run_scan_now():
+    """
+    بيشغّل الـ intelligent scan فوراً (بدل انتظار الـ scheduler).
+    للاختبار + ممكن يتربط بـ Cloud Scheduler كضمان إضافي.
+    """
+    try:
+        from services.scanner import run_intelligent_scan
+        from services.supabase_client import get_supabase
+
+        supabase = get_supabase()
+        if not supabase:
+            return {"status": "error", "reason": "Supabase مش متصل"}
+
+        await run_intelligent_scan(supabase)
+        return {"status": "scan_completed"}
+
+    except Exception as e:
+        logger.error(f"Manual scan failed: {e}")
+        return {"status": "error", "reason": str(e)}
+
+
+@app.post("/api/scan-now/{trip_id}")
+async def scan_now(trip_id: str):
+    """
+    Immediately scan ONE trip — the app should call this right after creating a
+    trip so short-notice trips (leaving soon) don't wait for the next scheduler
+    cycle. Runs the same scan_trip path as the scheduler.
+    """
+    try:
+        from services.scanner import scan_trip
+        from services.supabase_client import get_supabase
+
+        supabase = get_supabase()
+        if not supabase:
+            return {"status": "error", "reason": "Supabase مش متصل"}
+
+        res  = supabase.table("planned_trips").select("*").eq("id", trip_id).single().execute()
+        trip = res.data
+        if not trip:
+            return {"status": "error", "reason": f"trip {trip_id} not found"}
+
+        # reverse_adj is unused by the route-level scan; pass an empty dict.
+        await scan_trip(trip, {}, supabase)
+        return {"status": "scanned", "trip_id": trip_id}
+
+    except Exception as e:
+        logger.error(f"scan-now failed for {trip_id}: {e}")
         return {"status": "error", "reason": str(e)}
 
 

@@ -312,3 +312,80 @@ async def stream_google_plan(
         f"date={target_date} ({target_date.strftime('%A')}) | "
         f"via_waypoints={len(sampled)}"
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# Route-level live/predicted congestion (for the intelligent scanner)
+# ─────────────────────────────────────────────────────────────────
+
+async def get_google_route_congestion(
+    origin_lat: float, origin_lng: float,
+    dest_lat:   float, dest_lng:   float,
+    free_flow_seconds: float | None = None,
+    departure_utc: datetime | None = None,
+) -> dict | None:
+    """
+    Route-level congestion from the SAME Google Routes source + jam formula the
+    plan-drive slots use (api/plan_drive_stream._jam_adaptive), so scanner alerts
+    and the on-screen slots agree:
+
+        jam = clamp((live_duration / free_flow_duration - 1) / 0.50, 0, 1)
+
+    - departure_utc: when the user leaves (UTC-aware). Google rejects past
+      times, so we clamp to now+2min and otherwise pass it through to get
+      PREDICTED traffic at the departure time (same as a slot for that time).
+    - free_flow_seconds: the trip's stored Mapbox free-flow duration. If absent,
+      we fetch Google's TRAFFIC_UNAWARE duration as the baseline.
+
+    Returns {live_seconds, free_flow_seconds, congestion_ratio, jam_factor}
+    with jam_factor on the 0..1 slot scale, or None on failure.
+    """
+    now = datetime.now(timezone.utc)
+    if departure_utc is None or departure_utc <= now + timedelta(minutes=2):
+        departure_utc = now + timedelta(minutes=2)
+    dep_iso = (departure_utc.astimezone(timezone.utc)
+               .replace(microsecond=0).isoformat().replace("+00:00", "Z"))
+
+    def _body(aware: bool) -> dict:
+        b = {
+            "origin":      {"location": {"latLng": {"latitude": origin_lat, "longitude": origin_lng}}},
+            "destination": {"location": {"latLng": {"latitude": dest_lat,   "longitude": dest_lng}}},
+            "travelMode":  "DRIVE",
+            "routingPreference": "TRAFFIC_AWARE_OPTIMAL" if aware else "TRAFFIC_UNAWARE",
+        }
+        if aware:
+            b["departureTime"] = dep_iso
+        return b
+
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            live_resp = await client.post(ROUTES_URL, json=_body(True), headers=_make_headers())
+            if live_resp.status_code != 200:
+                logger.warning(f"Google congestion: live {live_resp.status_code} {live_resp.text[:120]}")
+                return None
+            live = _parse_duration(live_resp.json())
+            if not live:
+                logger.warning("Google congestion: no live route returned")
+                return None
+
+            free = int(free_flow_seconds) if free_flow_seconds and free_flow_seconds > 0 else None
+            if free is None:
+                free_resp = await client.post(ROUTES_URL, json=_body(False), headers=_make_headers())
+                free = _parse_duration(free_resp.json()) if free_resp.status_code == 200 else None
+    except Exception as e:
+        logger.error(f"Google congestion error: {e}")
+        return None
+
+    if not free or free <= 0:
+        logger.warning("Google congestion: no free-flow baseline")
+        return None
+
+    ratio = live / free
+    jam   = max(0.0, min(1.0, (ratio - 1.0) / 0.50))
+    logger.info(f"Google congestion: live={live}s free={free}s ratio={ratio:.2f} jam={jam:.2f}")
+    return {
+        "live_seconds":      live,
+        "free_flow_seconds": free,
+        "congestion_ratio":  round(ratio, 3),
+        "jam_factor":        round(jam, 3),   # 0..1, same scale as plan-drive slots
+    }

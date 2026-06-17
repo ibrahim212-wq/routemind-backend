@@ -20,6 +20,8 @@ from model.tier1 import get_historical_jam, jam_to_level, jam_to_multiplier
 from model.tier2 import predict_junction_short_horizon
 from services.tomtom import get_readings_for_junctions
 from services.junction_mapper import get_junction_by_id
+from services.supabase_client import get_supabase
+from services.google_traffic import get_google_route_congestion
 
 logger = logging.getLogger("routemind.scan_route")
 router = APIRouter()
@@ -207,7 +209,29 @@ async def scan_route(req: ScanRouteRequest):
             ))
 
     # 4. Decision: should we alert the user?
-    total_delay_min = max(0.0, total_predicted_s / 60 - free_flow_min)
+    # Headline delay = the REAL Google delay (live − free-flow) — the same signal
+    # the background scanner + notifications use — NOT the inflated historical
+    # model sum. Fall back to the model estimate only if the Google/trip lookup
+    # is unavailable, so the endpoint never breaks.
+    model_delay_min = max(0.0, total_predicted_s / 60 - free_flow_min)
+    total_delay_min = model_delay_min
+    try:
+        supabase = get_supabase()
+        trip_res = (supabase.table("planned_trips").select("*")
+                    .eq("id", req.trip_id).single().execute())
+        trip = trip_res.data if trip_res else None
+        if trip:
+            cong = await get_google_route_congestion(
+                float(trip["origin_lat"]), float(trip["origin_lng"]),
+                float(trip["dest_lat"]),   float(trip["dest_lng"]),
+                free_flow_seconds=req.base_duration_seconds,
+            )
+            if cong:
+                total_delay_min = max(
+                    0.0, round((cong["live_seconds"] - cong["free_flow_seconds"]) / 60, 1)
+                )
+    except Exception as e:
+        logger.warning(f"scan-route real-delay lookup failed, using model estimate: {e}")
     leave_early_by  = round(total_delay_min * 1.1, 0)  # slight buffer
 
     if total_delay_min >= 15:

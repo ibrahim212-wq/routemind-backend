@@ -7,6 +7,7 @@ Direct HTTP wrapper للـ Supabase REST API.
 
 import os
 import logging
+from urllib.parse import quote
 from typing import Any, Dict, List, Optional
 import httpx
 
@@ -32,7 +33,7 @@ class TableQuery:
         self._base_url    = base_url
         self._headers     = headers
         self._table       = table
-        self._filters: List[str] = []
+        self._filters: List[tuple] = []     # (col, operator_value) tuples
         self._select_cols = "*"
         self._limit_val: Optional[int] = None
         self._order_col: Optional[str] = None
@@ -47,15 +48,15 @@ class TableQuery:
         return self
 
     def eq(self, col: str, val: Any) -> "TableQuery":
-        self._filters.append(f"{col}=eq.{val}")
+        self._filters.append((col, f"eq.{val}"))
         return self
 
     def gte(self, col: str, val: Any) -> "TableQuery":
-        self._filters.append(f"{col}=gte.{val}")
+        self._filters.append((col, f"gte.{val}"))
         return self
 
     def lte(self, col: str, val: Any) -> "TableQuery":
-        self._filters.append(f"{col}=lte.{val}")
+        self._filters.append((col, f"lte.{val}"))
         return self
 
     def limit(self, n: int) -> "TableQuery":
@@ -79,13 +80,13 @@ class TableQuery:
 
     def _build_url(self) -> str:
         url    = f"{self._base_url}/{self._table}"
-        params = [f"select={self._select_cols}"]
+        params = [f"select={quote(self._select_cols, safe='*,()')}"]
 
-        for f in self._filters:
-            col, val = f.split("=", 1)
-            # نستبدل +00:00 بـ Z علشان نتجنب الـ double encoding
-            val = str(val).replace("+00:00", "Z")
-            params.append(f"{col}={val}")
+        for col, op_val in self._filters:
+            # URL-encode the value part. safe='.' keeps the operator dot
+            # (eq./gte./lte.) readable but encodes + : etc in timestamps.
+            encoded = quote(op_val, safe=".")
+            params.append(f"{col}={encoded}")
 
         if self._order_col:
             direction = "desc" if self._order_desc else "asc"
@@ -121,7 +122,7 @@ class TableQuery:
             logger.error(f"Supabase INSERT {self._table}: {e}")
             return Result(None, error=str(e))
 
-    def _execute_update(self) -> "Result":
+    def execute_update(self) -> "Result":
         url     = self._build_url()
         headers = dict(self._headers)
         headers["Prefer"] = "return=minimal"
@@ -133,6 +134,10 @@ class TableQuery:
         except Exception as e:
             logger.error(f"Supabase UPDATE {self._table}: {e}")
             return Result(None, error=str(e))
+
+    # backwards-compat alias
+    def _execute_update(self) -> "Result":
+        return self.execute_update()
 
 
 class Result:

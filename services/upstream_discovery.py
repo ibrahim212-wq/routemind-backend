@@ -111,6 +111,7 @@ def _dijkstra_reverse(
     target_idx: int,
     reverse_adj: Dict[int, List[Tuple[int, float]]],
     max_time_sec: float,
+    max_hops: Optional[int] = None,
 ) -> Dict[int, float]:
     """
     Dijkstra من الـ target بالعكس.
@@ -120,15 +121,17 @@ def _dijkstra_reverse(
         target_idx:    junction_idx الـ target
         reverse_adj:   output بتاع build_reverse_adj()
         max_time_sec:  نوقف البحث لو تعدى الوقت ده (optimization)
+        max_hops:      لو محدد، ما نتوسّعش أبعد من ده edges من الـ target
+                       (feeder hop cap — cost control). None = بدون حد (السلوك القديم)
 
     Returns:
         {junction_idx: travel_time_to_target_sec}
     """
     dist: Dict[int, float] = {target_idx: 0.0}
-    heap = [(0.0, target_idx)]
+    heap = [(0.0, 0, target_idx)]   # (time, hop_count, node)
 
     while heap:
-        d, u = heapq.heappop(heap)
+        d, h, u = heapq.heappop(heap)
 
         if d > dist.get(u, float("inf")):
             continue  # outdated entry
@@ -136,11 +139,14 @@ def _dijkstra_reverse(
         if d > max_time_sec:
             continue  # مش محتاجين أبعد من كده
 
+        if max_hops is not None and h >= max_hops:
+            continue  # وصلنا أقصى عدد hops — ما نتوسّعش من هنا
+
         for v, travel_time in reverse_adj.get(u, []):
             new_d = d + travel_time
             if new_d < dist.get(v, float("inf")):
                 dist[v] = new_d
-                heapq.heappush(heap, (new_d, v))
+                heapq.heappush(heap, (new_d, h + 1, v))
 
     return dist
 
@@ -155,6 +161,7 @@ def get_upstream_junctions(
     meta_df: pd.DataFrame,
     reverse_adj: Dict[int, List[Tuple[int, float]]],
     tolerance_pct: float = 0.25,
+    max_hops: Optional[int] = None,
 ) -> List[Dict]:
     """
     لكل junction على الطريق، نلاقي الـ junctions اللي
@@ -186,7 +193,7 @@ def get_upstream_junctions(
 
     # Dijkstra بالعكس من الـ target
     max_search_sec = time_offset_seconds * (1 + tolerance_pct) + 60  # margin
-    all_dists = _dijkstra_reverse(target_idx, reverse_adj, max_search_sec)
+    all_dists = _dijkstra_reverse(target_idx, reverse_adj, max_search_sec, max_hops=max_hops)
 
     # فلتر: الـ nodes اللي travel_time بتاعتهم ≈ time_offset
     tolerance_sec = time_offset_seconds * tolerance_pct
