@@ -247,6 +247,39 @@ def _distribute_delay(spots: list, total_delay: int) -> None:
         remainder -= 1
 
 
+def _normalize_alert_junctions(spots: list) -> None:
+    """
+    Shape-compatibility guard: guarantee EVERY alert_junction has the full field
+    set with null-safe defaults, so the from_scan and fallback paths return an
+    IDENTICAL shape the Flutter client can always deserialize. Required numeric
+    fields never null (→ 0/0.0); required string fields never null (→ ""); only
+    the optional Phase-3 fields (feeder_pressure/feeders/window/lead_minutes) may
+    be null. Mutates in place.
+    """
+    for s in spots:
+        dr = s.get("distance_to_route_km")
+        dr = 0.0 if dr is None else float(dr)
+        s["distance_to_route_km"]    = round(dr, 3)
+        s["dist_to_segment_m"]       = round(dr * 1000.0, 1)   # client-expected alias
+        dfo = s.get("distance_from_origin_km")
+        s["distance_from_origin_km"] = 0.0 if dfo is None else round(float(dfo), 3)
+        s["jam_factor"]   = 0.0 if s.get("jam_factor")  is None else float(s["jam_factor"])
+        s["eta_minutes"]  = 0.0 if s.get("eta_minutes") is None else float(s["eta_minutes"])
+        s["delay_min"]    = int(s.get("delay_min") or 0)
+        s["level"]        = s.get("level") or "FREE"
+        s["source"]       = s.get("source") or ""
+        s["live_speed"]   = 0.0 if s.get("live_speed")  is None else float(s["live_speed"])
+        s["confidence"]   = 0.0 if s.get("confidence")  is None else float(s["confidence"])
+        s["congestion_label"] = s.get("congestion_label") or ""
+        s["lat"]          = 0.0 if s.get("lat") is None else float(s["lat"])
+        s["lng"]          = 0.0 if s.get("lng") is None else float(s["lng"])
+        # optional / new Phase-3 fields — may be null, but key must exist
+        s["feeders"]        = s.get("feeders") or []
+        s.setdefault("feeder_pressure", None)
+        s.setdefault("window", None)
+        s.setdefault("lead_minutes", None)
+
+
 async def _build_per_spot_enrichment(trip: dict, expected_delay_min: int, route_seconds: float):
     """
     Returns (alert_junctions, coverage). Per-junction LEVEL = LIVE TomTom (blended
@@ -283,7 +316,10 @@ async def _build_per_spot_enrichment(trip: dict, expected_delay_min: int, route_
              # Component D — live/source accounting (defaults for early returns)
              "live_junctions": 0, "pattern_junctions": 0, "no_data_junctions": 0,
              "primary_source": "patterns", "tile_cache_hits": 0,
-             "source_breakdown": {}, "tomtom_calls": 0}
+             "source_breakdown": {}, "tomtom_calls": 0,
+             # legacy keys the Flutter client still expects — keep, never remove
+             "tomtom_deferred": 0, "google_fallback_calls": 0,
+             "from_scan_results": False}
         if extra:
             c.update(extra)
         return c
@@ -379,6 +415,7 @@ async def _build_per_spot_enrichment(trip: dict, expected_delay_min: int, route_
                           "congestion_label": None, "dist_to_segment_m": None})
 
     _distribute_delay(spots, expected_delay_min)
+    _normalize_alert_junctions(spots)        # identical, null-safe shape for the client
 
     # ── coverage + source breakdown (Component D) ──
     breakdown = {}
@@ -427,7 +464,7 @@ async def _alert_junctions_from_scan(trip: dict, supabase, expected_delay_min: i
     delay is re-distributed against the authoritative headline so the bubbles still
     sum EXACTLY to expected_delay_min (Phase 1 contract).
     """
-    from services.scanner import _jam_to_level
+    from services.scanner import _jam_to_level, _haversine_km
     trip_id = trip["id"]
     try:
         res = (supabase.table("scan_results").select("*")
@@ -482,8 +519,23 @@ async def _alert_junctions_from_scan(trip: dict, supabase, expected_delay_min: i
             "lead_minutes": uj.get("lead_minutes"),
         })
 
+    # order by ETA and fill distance_from_origin_km (rough, never null) so the
+    # client gets the same non-null numeric the Phase 1+2 path always provided
+    spots.sort(key=lambda s: s.get("eta_minutes") or 0.0)
+    try:
+        o_lat, o_lng = float(trip["origin_lat"]), float(trip["origin_lng"])
+        d_lat, d_lng = float(trip["dest_lat"]),   float(trip["dest_lng"])
+        total_km = _haversine_km(o_lat, o_lng, d_lat, d_lng)
+        max_eta  = max((s.get("eta_minutes") or 0.0) for s in spots) or 1.0
+        for s in spots:
+            s["distance_from_origin_km"] = round((s.get("eta_minutes") or 0.0) / max_eta * total_km, 3)
+            s["distance_to_route_km"]    = 0.0   # stored scan junctions are on-route
+    except Exception:
+        pass  # normalizer will default any remaining nulls
+
     # reconcile per-spot delay to the authoritative Google headline (Σ == expected)
     _distribute_delay(spots, expected_delay_min)
+    _normalize_alert_junctions(spots)        # identical, null-safe shape for the client
 
     breakdown = {}
     for s in spots:
@@ -502,6 +554,8 @@ async def _alert_junctions_from_scan(trip: dict, supabase, expected_delay_min: i
         "no_data_junctions": breakdown.get("none", 0),
         "primary_source": "scan_results",
         "tile_cache_hits": 0, "tomtom_calls": 0,
+        # legacy keys the Flutter client still expects — keep, never remove
+        "tomtom_deferred": 0, "google_fallback_calls": 0,
         "source_breakdown": breakdown,
         "from_scan_results": True,
         "scan_batch_at": latest_ts,
