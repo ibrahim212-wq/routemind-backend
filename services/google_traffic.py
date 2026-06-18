@@ -368,10 +368,14 @@ async def get_google_route_congestion(
                 logger.warning("Google congestion: no live route returned")
                 return None
 
-            free = int(free_flow_seconds) if free_flow_seconds and free_flow_seconds > 0 else None
-            if free is None:
-                free_resp = await client.post(ROUTES_URL, json=_body(False), headers=_make_headers())
-                free = _parse_duration(free_resp.json()) if free_resp.status_code == 200 else None
+            # Free-flow baseline ALWAYS = Google's own TRAFFIC_UNAWARE duration, NOT
+            # the stored base_duration_seconds (often inflated by congestion at trip
+            # creation, which made ratio<1 → jam=0 → alerts never fired). The passed
+            # free_flow_seconds is only a last-resort fallback if this call fails.
+            free_resp = await client.post(ROUTES_URL, json=_body(False), headers=_make_headers())
+            free = _parse_duration(free_resp.json()) if free_resp.status_code == 200 else None
+            if free is None and free_flow_seconds and free_flow_seconds > 0:
+                free = int(free_flow_seconds)
     except Exception as e:
         logger.error(f"Google congestion error: {e}")
         return None

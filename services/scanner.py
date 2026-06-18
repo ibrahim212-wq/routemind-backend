@@ -54,7 +54,7 @@ except Exception:  # pragma: no cover — missing tzdata; fall back to fixed UTC
 JAM_LEVELS = [
     (8.0, "CRITICAL"),   # jam01 >= 0.80  (slot VERY_HIGH)
     (5.5, "SERIOUS"),    # jam01 >= 0.55  (slot HIGH)
-    (3.2, "WARNING"),    # jam01 >= 0.32  (slot MODERATE)
+    (2.5, "WARNING"),    # jam01 >= 0.25  (ratio >= ~1.125) — catches moderate Cairo rush-hour
     (1.5, "ADVISORY"),   # jam01 >= 0.15  (slot LIGHT)
     (0.0, "FREE"),
 ]
@@ -702,9 +702,12 @@ async def scan_trip(
 
     # Predicted congestion AT the user's departure time, from the SAME Google
     # Routes source + jam formula the plan-drive slots use → alerts match slots.
+    # free_flow_seconds=None → use Google's own TRAFFIC_UNAWARE free-flow as the
+    # baseline (the stored base_duration_seconds was often inflated by congestion at
+    # trip-creation, masking real congestion: ratio<1 → jam=0 → no alerts).
     cong = await get_google_route_congestion(
         o_lat, o_lng, d_lat, d_lng,
-        free_flow_seconds=base_dur,
+        free_flow_seconds=None,
         departure_utc=leave_by,
     )
     if cong is None:
