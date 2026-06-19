@@ -189,6 +189,134 @@ async def scan_now(trip_id: str):
         return {"status": "error", "reason": str(e)}
 
 
+@app.post("/demo/scan-now")
+async def demo_scan_now():
+    """
+    DEMO TRIGGER — no new pipeline. Picks the most-congested of a few common Cairo
+    routes RIGHT NOW, creates a temporary planned trip (departure = now, correct
+    Google free-flow baseline), runs the EXISTING scan_trip, then broadcasts the
+    EXISTING congestion notification (same format) to ALL registered devices by
+    calling the existing _send_congestion_notification once per user that has
+    tokens. The notification carries trip_id, so tapping opens the existing alert
+    screen with the per-junction rows this scan just wrote.
+    """
+    import math
+    from datetime import datetime, timezone, timedelta
+    from services.supabase_client import get_supabase
+    from services.google_traffic import get_google_route_congestion
+    from services.scanner import (
+        scan_trip, _send_congestion_notification, _jam_to_level, _haversine_km,
+    )
+    from model.loader import ModelLoader
+
+    supabase = get_supabase()
+    if not supabase:
+        return {"status": "error", "reason": "Supabase not connected"}
+
+    # ── a. pick the most-congested route right now (existing traffic source) ──
+    routes = [
+        ("Ring Road",           30.0558, 31.3400, 30.0850, 31.3050),
+        ("Route 75M (New Cairo)", 30.0270, 31.4380, 29.9980, 31.4760),
+        ("Salah Salem",         30.0695, 31.2843, 30.0444, 31.2357),
+    ]
+    best = None
+    for name, a, b, c, d in routes:
+        cong = await get_google_route_congestion(a, b, c, d, free_flow_seconds=None, departure_utc=None)
+        if not cong:
+            continue
+        if best is None or cong["congestion_ratio"] > best[1]["congestion_ratio"]:
+            best = (name, cong, (a, b, c, d))
+    if best is None:
+        return {"status": "error", "reason": "no live route data"}
+    name, cong, (a, b, c, d) = best
+    base_dur = int(cong["free_flow_seconds"])
+
+    # ── b. corridor junction_ids from the trained set (same as a real plan) ──
+    meta = ModelLoader.get_meta()
+    total = _haversine_km(a, b, c, d)
+    cands = []
+    for _, row in meta.iterrows():
+        p = (float(row["latitude"]), float(row["longitude"]))
+        d_o = _haversine_km(a, b, p[0], p[1]); d_d = _haversine_km(c, d, p[0], p[1])
+        frac = (d_o**2 - d_d**2 + total**2) / (2 * total**2) if total > 0 else 0
+        perp = math.sqrt(max(0.0, d_o**2 - (frac * total)**2))
+        if 0.0 <= frac <= 1.0 and perp < 2.5:
+            cands.append((frac, str(row["junction_id"])))
+    cands.sort()
+    jids = []
+    if cands:
+        n = min(10, len(cands))
+        step = (len(cands) - 1) / max(1, n - 1)
+        for i in range(n):
+            jid = cands[int(i * step)][1]
+            if jid not in jids:
+                jids.append(jid)
+
+    # ── c. create the temporary plan (exactly like a real user plan) ──
+    now = datetime.now(timezone.utc)
+    trip_row = {
+        "user_id": "demo-broadcast",
+        "dest_name": f"Demo — {name}",
+        "origin_lat": a, "origin_lng": b, "dest_lat": c, "dest_lng": d,
+        "leave_by": now.isoformat(),
+        "arrive_by": (now + timedelta(seconds=base_dur)).isoformat(),
+        "base_duration_seconds": base_dur,
+        "predicted_minutes": round(base_dur / 60),
+        "junction_ids": jids,
+        "status": "active",
+    }
+    ins = supabase.table("planned_trips").insert(trip_row)
+    if not ins.data:
+        return {"status": "error", "reason": f"plan insert failed: {ins.error}"}
+    trip = ins.data[0]
+    trip_id = trip["id"]
+
+    # ── d. run the EXISTING scan function (writes scan_results, decides alert) ──
+    await scan_trip(trip, {}, supabase)
+
+    # read the scan's own result for an honest notification level + delay
+    sr = (supabase.table("scan_results").select("*")
+          .eq("trip_id", trip_id).eq("prediction_source", "google_routes")
+          .order("scanned_at", desc=True).limit(1).execute().data or [])
+    if sr:
+        predicted_jam = float(sr[0].get("predicted_jam_factor") or 0.0)
+        level         = sr[0].get("predicted_level") or "FREE"
+        live_sec      = float(sr[0].get("user_eta_seconds") or cong["live_seconds"])
+    else:
+        predicted_jam = round(cong["jam_factor"] * 10, 2)
+        level         = _jam_to_level(predicted_jam)
+        live_sec      = float(cong["live_seconds"])
+    real_delay_min = max(0, round((live_sec - base_dur) / 60))
+    eta_minutes    = int(live_sec / 60)
+    rep_junction   = jids[0] if jids else "demo"
+    # FREE has no notification template; for the demo fall back to ADVISORY so every
+    # device still receives a "tap to view" — the alert screen shows the real data.
+    notif_level = level if level in ("CRITICAL", "SERIOUS", "WARNING", "ADVISORY") else "ADVISORY"
+
+    # ── e. broadcast the EXISTING notification to ALL devices (one call per user) ──
+    tok_rows = supabase.table("fcm_tokens").select("user_id").limit(500).execute().data or []
+    user_ids = list({r["user_id"] for r in tok_rows if r.get("user_id")})
+    notified = 0
+    for uid in user_ids:
+        try:
+            await _send_congestion_notification(
+                user_id=uid, trip_id=trip_id, dest_name=trip_row["dest_name"],
+                junction_id=rep_junction, level=notif_level, jam_factor=predicted_jam,
+                eta_minutes=eta_minutes, real_delay_min=real_delay_min, supabase=supabase)
+            notified += 1
+        except Exception as e:
+            logger.warning(f"demo broadcast failed for user {uid}: {e}")
+
+    logger.info(f"DEMO scan: route={name} level={level} delay={real_delay_min}min "
+                f"trip={trip_id} users_notified={notified}")
+    return {
+        "status": "ok", "trip_id": trip_id, "route": name,
+        "congestion_ratio": cong["congestion_ratio"], "level": level,
+        "notification_level": notif_level, "real_delay_min": real_delay_min,
+        "junctions": len(jids), "users_notified": notified,
+    }
+
+
 @app.get("/health")
 async def health():
     return {
