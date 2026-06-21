@@ -17,7 +17,8 @@ from api.plan_drive import router as plan_drive_router
 from api.scan_route import router as scan_route_router
 from api.route_compare import router as route_compare_router
 from api.plan_drive_stream import router as plan_drive_stream_router
-from api.trip_alert import router as trip_alert_router          # ← جديد
+from api.trip_alert import router as trip_alert_router
+from api.assistant import router as assistant_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("routemind")
@@ -81,7 +82,8 @@ app.include_router(plan_drive_router,        prefix="/api")
 app.include_router(scan_route_router,        prefix="/api")
 app.include_router(route_compare_router,     prefix="/api")
 app.include_router(plan_drive_stream_router, prefix="/api")
-app.include_router(trip_alert_router,        prefix="/api")     # ← جديد
+app.include_router(trip_alert_router,        prefix="/api")
+app.include_router(assistant_router,         prefix="/api")
 
 
 @app.post("/api/test-notify")
