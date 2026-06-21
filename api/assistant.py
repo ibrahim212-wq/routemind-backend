@@ -170,6 +170,7 @@ async def assistant_chat(body: ChatRequest):
 
     # ── Guard: openai package ────────────────────────────────────────────────
     try:
+        import httpx
         from openai import AsyncOpenAI, APITimeoutError, APIStatusError
     except ImportError:
         logger.error("openai package not installed — add 'openai' to requirements.txt")
@@ -191,7 +192,16 @@ async def assistant_chat(body: ChatRequest):
     ]
 
     # ── Call OpenAI ──────────────────────────────────────────────────────────
-    client = AsyncOpenAI(api_key=api_key, timeout=10.0)
+    # Explicit httpx client avoids the connection errors Cloud Run sees with
+    # the default client (which inherits ambient proxy env vars and uses a
+    # shorter socket timeout). No proxy settings = clean direct egress.
+    client = AsyncOpenAI(
+        api_key=api_key,
+        http_client=httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0),
+            follow_redirects=True,
+        ),
+    )
 
     try:
         response = await client.chat.completions.create(
