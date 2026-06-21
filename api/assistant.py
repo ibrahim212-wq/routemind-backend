@@ -1,9 +1,13 @@
 """
 api/assistant.py
-POST /api/assistant/chat
 
-Phase 1 — read-only AI voice assistant foundation.
-TEXT IN, TEXT OUT. No voice, no trip modifications yet.
+AI assistant endpoints (all OpenAI calls are server-side, direct httpx — no SDK):
+  POST /api/assistant/chat   — text in  → text reply        (phase 1, unchanged)
+  POST /api/assistant/voice  — audio in → transcript + reply text + reply audio
+  POST /api/assistant/tts    — text in  → reply audio (mp3, base64)
+
+The chat-completion logic lives in ONE shared helper (_run_chat) that both
+/chat and /voice call, so the system prompt + behavior stay identical.
 
 Required env var (Cloud Run secret):
   OPENAI_API_KEY   — OpenAI secret key. Set via:
@@ -11,17 +15,22 @@ Required env var (Cloud Run secret):
                        --update-secrets OPENAI_API_KEY=openai-key:latest \\
                        --region us-central1
 
-Optional env var:
-  ASSISTANT_MODEL  — OpenAI model to use. Default: "gpt-4o-mini".
-                     Switch to "gpt-4o" for higher quality when needed.
+Optional env vars (all have sane defaults):
+  ASSISTANT_MODEL      — chat model.       Default "gpt-4o-mini".
+  ASSISTANT_STT_MODEL  — Whisper model.    Default "whisper-1".
+  ASSISTANT_TTS_MODEL  — TTS model.        Default "gpt-4o-mini-tts" (set to
+                                           "tts-1" if the newer model is unavailable).
+  ASSISTANT_TTS_VOICE  — TTS voice.        Default "nova" (natural for AR + EN).
 """
 
 import os
+import json
+import base64
 import logging
 from typing import Optional, List
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
 
 logger = logging.getLogger("routemind.assistant")
@@ -29,8 +38,15 @@ router = APIRouter()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-OPENAI_MODEL = os.environ.get("ASSISTANT_MODEL", "gpt-4o-mini")
-MAX_TOKENS   = 150   # short spoken replies; bump for richer responses if needed
+OPENAI_MODEL  = os.environ.get("ASSISTANT_MODEL", "gpt-4o-mini")
+WHISPER_MODEL = os.environ.get("ASSISTANT_STT_MODEL", "whisper-1")
+TTS_MODEL     = os.environ.get("ASSISTANT_TTS_MODEL", "gpt-4o-mini-tts")
+TTS_VOICE     = os.environ.get("ASSISTANT_TTS_VOICE", "nova")
+MAX_TOKENS    = 150   # short spoken replies; bump for richer responses if needed
+
+OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_STT_URL  = "https://api.openai.com/v1/audio/transcriptions"
+OPENAI_TTS_URL  = "https://api.openai.com/v1/audio/speech"
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
@@ -61,6 +77,10 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply:    str
     language: str   # "ar" | "en"
+
+class TtsRequest(BaseModel):
+    text:     str
+    language: Optional[str] = None   # advisory only; TTS voice handles both
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 
@@ -153,21 +173,32 @@ def _fallback(lang: str, reason: str = "error") -> ChatResponse:
         }.get(reason, "Something went wrong, please try again.")
     return ChatResponse(reply=msg, language=lang)
 
-# ── Endpoint ──────────────────────────────────────────────────────────────────
 
-@router.post("/assistant/chat", response_model=ChatResponse)
-async def assistant_chat(body: ChatRequest):
+def _voice_error_text(lang: str, kind: str) -> str:
+    """Short spoken-friendly error line for the voice flow (no chat reply available)."""
+    ar = {
+        "empty":      "مسمعتش حاجة واضحة، جرب تاني.",
+        "stt_failed": "مقدرتش أفهم الصوت، جرب تاني.",
+    }
+    en = {
+        "empty":      "I didn't catch that, please try again.",
+        "stt_failed": "I couldn't understand the audio, please try again.",
+    }
+    table = ar if lang == "ar" else en
+    return table.get(kind, table["stt_failed"])
+
+
+async def _run_chat(message: str, trip_context: Optional[TripContext]) -> ChatResponse:
     """
-    Phase 1 AI assistant — read-only, text-in / text-out.
+    Shared chat-completion logic for BOTH /chat and /voice — identical behavior.
+    Builds the same system prompt + trip-context block, calls OpenAI chat
+    completions via direct httpx, and returns a ChatResponse. Never raises:
+    on any failure it returns a friendly fallback ChatResponse.
 
-    Accepts a free-form user message (Arabic or English) plus an optional
-    TripContext object from the navigation app. Calls OpenAI and returns a
-    short spoken reply in the same language the user wrote in.
-
-    The OpenAI call is structured for Phase 3 function-calling: just
-    uncomment the `tools` / `tool_choice` lines and define _ACTION_TOOLS.
+    Structured for Phase 3 function-calling: add "tools"/"tool_choice" to the
+    json payload below when actions are introduced.
     """
-    lang = _detect_language(body.message)
+    lang = _detect_language(message)
 
     # ── Guard: API key ───────────────────────────────────────────────────────
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -176,8 +207,8 @@ async def assistant_chat(body: ChatRequest):
         return _fallback(lang, "no_key")
 
     # ── Build messages ───────────────────────────────────────────────────────
-    ctx_block    = _build_context_block(body.trip_context)
-    user_content = body.message + ctx_block
+    ctx_block    = _build_context_block(trip_context)
+    user_content = message + ctx_block
 
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -185,12 +216,10 @@ async def assistant_chat(body: ChatRequest):
     ]
 
     # ── Call OpenAI directly via httpx (no openai package needed) ────────────
-    # Direct HTTP avoids the openai SDK's default client, which on Cloud Run
-    # picks up ambient proxy env vars and causes connection errors.
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
+                OPENAI_CHAT_URL,
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type":  "application/json",
@@ -223,3 +252,195 @@ async def assistant_chat(body: ChatRequest):
     logger.info(f"assistant_chat: model={OPENAI_MODEL} lang={lang} tokens_used={tokens}")
 
     return ChatResponse(reply=reply_text, language=lang)
+
+
+async def _transcribe_audio(
+    api_key: str,
+    audio_bytes: bytes,
+    filename: Optional[str],
+    content_type: Optional[str],
+    language_hint: Optional[str],
+) -> str:
+    """Transcribe audio with OpenAI Whisper (multipart, direct httpx). Returns the
+    spoken text. Raises httpx errors on failure (caller handles gracefully)."""
+    files = {
+        "file": (
+            filename or "audio.m4a",
+            audio_bytes,
+            content_type or "application/octet-stream",
+        ),
+    }
+    data = {"model": WHISPER_MODEL, "response_format": "json"}
+    if language_hint in ("ar", "en"):
+        data["language"] = language_hint   # improves accuracy, esp. for Arabic
+
+    # Whisper sets the multipart Content-Type (with boundary) itself — don't set it.
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            OPENAI_STT_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            files=files,
+            data=data,
+        )
+        resp.raise_for_status()
+        return (resp.json().get("text") or "").strip()
+
+
+async def _synthesize_speech(api_key: str, text: str) -> Optional[bytes]:
+    """Generate spoken mp3 of `text` with OpenAI TTS (direct httpx). Returns the
+    mp3 bytes, or None on any failure (caller falls back to device TTS / null)."""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                OPENAI_TTS_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type":  "application/json",
+                },
+                json={
+                    "model":           TTS_MODEL,
+                    "voice":           TTS_VOICE,
+                    "input":           text,
+                    "response_format": "mp3",
+                },
+            )
+            resp.raise_for_status()
+            return resp.content
+    except httpx.HTTPStatusError as e:
+        logger.error(f"TTS HTTP error {e.response.status_code}: {e.response.text[:200]}")
+    except Exception as e:
+        logger.error(f"TTS failed: {e}")
+    return None
+
+# ── Endpoints ───────────────────────────────────────────────────────────────────
+
+@router.post("/assistant/chat", response_model=ChatResponse)
+async def assistant_chat(body: ChatRequest):
+    """
+    Text-in / text-out assistant (unchanged behavior). Thin wrapper over the
+    shared _run_chat() helper that /voice also uses.
+    """
+    return await _run_chat(body.message, body.trip_context)
+
+
+@router.post("/assistant/voice")
+async def assistant_voice(
+    audio:         UploadFile      = File(...),
+    trip_context:  Optional[str]   = Form(None),   # JSON string of TripContext
+    language_hint: Optional[str]   = Form(None),   # "ar" | "en"
+):
+    """
+    Voice assistant — audio in, (transcript + reply text + reply audio) out.
+
+    Flow (all server-side, OPENAI_API_KEY never leaves the backend):
+      1. Whisper transcribes the audio  → user's spoken text
+      2. _run_chat() (same logic as /chat) → reply text + detected language
+      3. OpenAI TTS speaks the reply     → mp3, returned base64
+
+    Always returns HTTP 200 with JSON so the app can parse reliably:
+      { "transcript", "reply", "language", "audio_base64", ["error"] }
+    On TTS failure, audio_base64 is null and the app falls back to device TTS.
+    """
+    hint     = language_hint if language_hint in ("ar", "en") else None
+    err_lang = hint or "en"
+
+    # ── Guard: API key ───────────────────────────────────────────────────────
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        logger.error("OPENAI_API_KEY env var is not set")
+        return {
+            "transcript": "", "reply": _fallback(err_lang, "no_key").reply,
+            "language": err_lang, "audio_base64": None, "error": "no_api_key",
+        }
+
+    # ── Read audio ───────────────────────────────────────────────────────────
+    try:
+        audio_bytes = await audio.read()
+    except Exception as e:
+        logger.error(f"voice: could not read upload: {e}")
+        audio_bytes = b""
+    if not audio_bytes:
+        return {
+            "transcript": "", "reply": _voice_error_text(err_lang, "empty"),
+            "language": err_lang, "audio_base64": None, "error": "empty_audio",
+        }
+
+    # ── Parse optional trip_context (ignore if malformed) ────────────────────
+    parsed_ctx: Optional[TripContext] = None
+    if trip_context:
+        try:
+            parsed_ctx = TripContext(**json.loads(trip_context))
+        except Exception as e:
+            logger.warning(f"voice: ignoring malformed trip_context: {e}")
+
+    # ── 1. Transcribe (Whisper) ──────────────────────────────────────────────
+    try:
+        transcript = await _transcribe_audio(
+            api_key, audio_bytes, audio.filename, audio.content_type, hint)
+    except httpx.TimeoutException:
+        logger.warning("Whisper request timed out")
+        return {
+            "transcript": "", "reply": _voice_error_text(err_lang, "stt_failed"),
+            "language": err_lang, "audio_base64": None, "error": "transcription_timeout",
+        }
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Whisper HTTP error {e.response.status_code}: {e.response.text[:200]}")
+        return {
+            "transcript": "", "reply": _voice_error_text(err_lang, "stt_failed"),
+            "language": err_lang, "audio_base64": None, "error": "transcription_failed",
+        }
+    except Exception as e:
+        logger.error(f"Whisper failed: {e}")
+        return {
+            "transcript": "", "reply": _voice_error_text(err_lang, "stt_failed"),
+            "language": err_lang, "audio_base64": None, "error": "transcription_failed",
+        }
+
+    if not transcript:
+        return {
+            "transcript": "", "reply": _voice_error_text(err_lang, "empty"),
+            "language": err_lang, "audio_base64": None, "error": "empty_transcript",
+        }
+
+    # ── 2. Chat (shared helper — identical to /chat behavior) ─────────────────
+    chat = await _run_chat(transcript, parsed_ctx)
+
+    # ── 3. TTS the reply (graceful: null audio on failure) ────────────────────
+    audio_b64 = None
+    mp3 = await _synthesize_speech(api_key, chat.reply)
+    if mp3:
+        audio_b64 = base64.b64encode(mp3).decode("ascii")
+
+    logger.info(
+        f"assistant_voice: lang={chat.language} transcript_len={len(transcript)} "
+        f"tts={'ok' if audio_b64 else 'null'} mp3_bytes={len(mp3) if mp3 else 0}"
+    )
+
+    return {
+        "transcript":   transcript,
+        "reply":        chat.reply,
+        "language":     chat.language,
+        "audio_base64": audio_b64,
+    }
+
+
+@router.post("/assistant/tts")
+async def assistant_tts(body: TtsRequest):
+    """
+    Text → speech. Returns { "audio_base64": "<mp3>" } or, on failure,
+    { "audio_base64": null, "error": "..." } (HTTP 200, app falls back).
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        logger.error("OPENAI_API_KEY env var is not set")
+        return {"audio_base64": None, "error": "no_api_key"}
+
+    text = (body.text or "").strip()
+    if not text:
+        return {"audio_base64": None, "error": "empty_text"}
+
+    mp3 = await _synthesize_speech(api_key, text)
+    if not mp3:
+        return {"audio_base64": None, "error": "tts_failed"}
+
+    return {"audio_base64": base64.b64encode(mp3).decode("ascii")}
