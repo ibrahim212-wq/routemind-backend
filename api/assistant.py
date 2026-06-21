@@ -20,6 +20,7 @@ import os
 import logging
 from typing import Optional, List
 
+import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -168,14 +169,6 @@ async def assistant_chat(body: ChatRequest):
     """
     lang = _detect_language(body.message)
 
-    # ── Guard: openai package ────────────────────────────────────────────────
-    try:
-        import httpx
-        from openai import AsyncOpenAI, APITimeoutError, APIStatusError
-    except ImportError:
-        logger.error("openai package not installed — add 'openai' to requirements.txt")
-        return _fallback(lang, "no_pkg")
-
     # ── Guard: API key ───────────────────────────────────────────────────────
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -191,44 +184,42 @@ async def assistant_chat(body: ChatRequest):
         {"role": "user",   "content": user_content},
     ]
 
-    # ── Call OpenAI ──────────────────────────────────────────────────────────
-    # Explicit httpx client avoids the connection errors Cloud Run sees with
-    # the default client (which inherits ambient proxy env vars and uses a
-    # shorter socket timeout). No proxy settings = clean direct egress.
-    client = AsyncOpenAI(
-        api_key=api_key,
-        http_client=httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0),
-            follow_redirects=True,
-        ),
-    )
-
+    # ── Call OpenAI directly via httpx (no openai package needed) ────────────
+    # Direct HTTP avoids the openai SDK's default client, which on Cloud Run
+    # picks up ambient proxy env vars and causes connection errors.
     try:
-        response = await client.chat.completions.create(
-            model      = OPENAI_MODEL,
-            max_tokens = MAX_TOKENS,
-            messages   = messages,
-            # ── Phase 3 hook — uncomment + define _ACTION_TOOLS to add actions ──
-            # tools       = _ACTION_TOOLS,
-            # tool_choice = "auto",
-        )
-        reply_text = (response.choices[0].message.content or "").strip()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type":  "application/json",
+                },
+                json={
+                    "model":      OPENAI_MODEL,
+                    "messages":   messages,
+                    "max_tokens": MAX_TOKENS,
+                    # ── Phase 3 hook — add "tools": [...] here for action support ──
+                },
+            )
+            response.raise_for_status()
+            data       = response.json()
+            reply_text = data["choices"][0]["message"]["content"].strip()
+            tokens     = data.get("usage", {}).get("total_tokens", "?")
 
-        # Safety: if model somehow returned empty, fall back gracefully.
         if not reply_text:
             return _fallback(lang, "error")
 
-    except APITimeoutError:
+    except httpx.TimeoutException:
         logger.warning("OpenAI request timed out")
         return _fallback(lang, "timeout")
-    except APIStatusError as e:
-        logger.error(f"OpenAI API status error {e.status_code}: {e.message}")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"OpenAI HTTP error {e.response.status_code}: {e.response.text[:200]}")
         return _fallback(lang, "error")
     except Exception as e:
         logger.error(f"Unexpected assistant error: {e}")
         return _fallback(lang, "error")
 
-    logger.info(f"assistant_chat: model={OPENAI_MODEL} lang={lang} "
-                f"tokens_used={getattr(response.usage, 'total_tokens', '?')}")
+    logger.info(f"assistant_chat: model={OPENAI_MODEL} lang={lang} tokens_used={tokens}")
 
     return ChatResponse(reply=reply_text, language=lang)
