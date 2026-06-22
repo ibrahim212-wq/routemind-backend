@@ -40,8 +40,8 @@ router = APIRouter()
 
 OPENAI_MODEL  = os.environ.get("ASSISTANT_MODEL", "gpt-4o-mini")
 WHISPER_MODEL = os.environ.get("ASSISTANT_STT_MODEL", "whisper-1")
-TTS_MODEL     = os.environ.get("ASSISTANT_TTS_MODEL", "gpt-4o-mini-tts")
-TTS_VOICE     = os.environ.get("ASSISTANT_TTS_VOICE", "nova")
+TTS_MODEL     = os.environ.get("ASSISTANT_TTS_MODEL", "tts-1-hd")   # clearer Arabic than gpt-4o-mini-tts
+TTS_VOICE     = os.environ.get("ASSISTANT_TTS_VOICE", "alloy")      # natural for AR+EN; try "shimmer" too
 MAX_TOKENS    = 150   # short spoken replies; bump for richer responses if needed
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
@@ -87,17 +87,26 @@ class TtsRequest(BaseModel):
 _SYSTEM_PROMPT = """You are RouteMind, a friendly in-car navigation assistant for Cairo, Egypt.
 
 Critical rules — follow ALL of them without exception:
-1. LANGUAGE: Reply in the EXACT same language and dialect the user wrote in.
-   - Egyptian Arabic (عامية مصرية) → reply in Egyptian Arabic.
-   - English → reply in English.
-   - Never switch or mix languages.
-2. LENGTH: 1–2 short sentences ONLY. Your reply will be read aloud while the user is driving.
-3. ACCURACY: Use ONLY the trip context provided to answer navigation questions.
+1. LANGUAGE — match the user EXACTLY. Detect the language the user actually used in
+   THEIR message and reply in that SAME language. This is the most important rule:
+   - If the user wrote/spoke in Arabic → reply in EGYPTIAN COLLOQUIAL Arabic
+     (اللهجة المصرية العامية), NOT Modern Standard Arabic / فصحى.
+   - If the user wrote/spoke in English → reply in English.
+   - If they mix languages, follow the DOMINANT language of what they said.
+   - NEVER reply in a language the user did not use. English in → English out.
+     Arabic in → Egyptian Arabic out. Do not switch or mix.
+2. EGYPTIAN DIALECT (when replying in Arabic): talk like a real Egyptian friend in the
+   car — casual and natural, NOT formal فصحى. Use everyday Egyptian words and phrasing.
+   - Say "فاضلك"، "يعني"، "حوالي"، "كده"، "خلصنا"، "بالتوفيق" — not stiff MSA.
+   - GOOD: "فاضلك ٦٤ كيلو لكايرو فيستيفال، يعني حوالي ٥٨ دقيقة. بالتوفيق!"
+   - BAD (too formal): "وصلتك لـ القاهرة فيستيفال سيتي بعد 63.9 كيلومتر، أتمنى لك رحلة ممتعة."
+3. LENGTH: 1–2 short sentences ONLY. Your reply is read aloud while the user is driving.
+4. ACCURACY: Use ONLY the trip context provided to answer navigation questions.
    Do NOT invent or guess traffic conditions, camera locations, distances, or times
    that are not explicitly in the context. If the context doesn't have the answer,
    say so naturally (e.g., "معنديش معلومات عن ده دلوقتي" / "I don't have that info right now").
-4. TONE: Calm, warm, and direct — like a knowledgeable friend in the passenger seat.
-5. GENERAL QUESTIONS: If the question has nothing to do with navigation,
+5. TONE: Calm, warm, and direct — like a knowledgeable friend in the passenger seat.
+6. GENERAL QUESTIONS: If the question has nothing to do with navigation,
    answer it briefly and helpfully — you are a general assistant too."""
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -249,9 +258,14 @@ async def _run_chat(message: str, trip_context: Optional[TripContext]) -> ChatRe
         logger.error(f"Unexpected assistant error: {e}")
         return _fallback(lang, "error")
 
-    logger.info(f"assistant_chat: model={OPENAI_MODEL} lang={lang} tokens_used={tokens}")
+    # Report the language of the ACTUAL reply text (not a guess from the input),
+    # so the `language` field always matches what the assistant actually said.
+    reply_lang = _detect_language(reply_text)
 
-    return ChatResponse(reply=reply_text, language=lang)
+    logger.info(f"assistant_chat: model={OPENAI_MODEL} in_lang={lang} "
+                f"reply_lang={reply_lang} tokens_used={tokens}")
+
+    return ChatResponse(reply=reply_text, language=reply_lang)
 
 
 async def _transcribe_audio(
