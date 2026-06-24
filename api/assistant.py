@@ -33,6 +33,8 @@ import httpx
 from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
 
+from api.places import resolve_nearby   # shared nearest-place resolver (no key in app)
+
 logger = logging.getLogger("routemind.assistant")
 router = APIRouter()
 
@@ -70,6 +72,10 @@ class TripContext(BaseModel):
     traffic_segments:      Optional[List[TrafficSegment]] = None
     cameras_ahead:         Optional[List[CameraAhead]]    = None
     speed_limit_kmh:       Optional[int]              = None
+    # Current GPS — REQUIRED for the add_stop action to resolve the nearest place.
+    # The app should populate these (see report: wire on the app side).
+    user_lat:              Optional[float]            = None
+    user_lng:              Optional[float]            = None
 
 class ChatRequest(BaseModel):
     message:      str
@@ -78,6 +84,9 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply:    str
     language: str   # "ar" | "en"
+    # Optional structured action for the app to act on (e.g. add a stop). Null for
+    # normal replies. When present, the app shows a confirm before acting.
+    action:   Optional[dict] = None
 
 class TtsRequest(BaseModel):
     text:     str
@@ -150,6 +159,41 @@ SPECIAL CASES:
 Use ONLY the trip context for navigation facts. NEVER invent road names, camera counts,
 distances, or times that aren't in the context — but phrase any gap gracefully (see above),
 never robotically. For general knowledge, your own knowledge is fine."""
+
+# ── Action tools (function-calling) ─────────────────────────────────────────────
+
+# ONE tool for now: add the nearest place of a category as a stop.
+ADD_STOP_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "add_stop",
+        "description": (
+            "Add the nearest place of a given category as a stop on the user's current "
+            "navigation route. Use when the user asks to add/stop at a gas station, "
+            "pharmacy, ATM, restaurant, or cafe."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["gas_station", "pharmacy", "atm", "restaurant", "cafe"],
+                },
+            },
+            "required": ["category"],
+        },
+    },
+}
+
+# Second-pass nudge: after the lookup runs, produce the spoken confirm question.
+_ADD_STOP_FOLLOWUP = (
+    "You called add_stop and just received the lookup result. Reply in the user's "
+    "language, 1–2 short warm sentences: if found=true, say the place name and its "
+    "approximate distance (round to km when ≥1000 m) and ASK if they want to add it "
+    "(they'll confirm with a tap). If found=false with reason 'no_result', say you "
+    "couldn't find one nearby. If reason 'no_location', say you can't tell where they "
+    "are right now. Vary your wording naturally."
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -241,30 +285,26 @@ def _voice_error_text(lang: str, kind: str) -> str:
 
 async def _run_chat(message: str, trip_context: Optional[TripContext]) -> ChatResponse:
     """
-    Shared chat-completion logic for BOTH /chat and /voice — identical behavior.
-    Builds the same system prompt + trip-context block, calls OpenAI chat
-    completions via direct httpx, and returns a ChatResponse. Never raises:
-    on any failure it returns a friendly fallback ChatResponse.
+    Shared chat-completion logic for BOTH /chat and /voice.
 
-    Structured for Phase 3 function-calling: add "tools"/"tool_choice" to the
-    json payload below when actions are introduced.
+    Function-calling enabled with ONE tool (add_stop). Normal questions return a
+    reply with action=None (a single model call). When the model calls add_stop,
+    we resolve the nearest place via the shared resolve_nearby() and do a second
+    model call so the spoken reply naturally asks the user to confirm; the
+    structured action is returned alongside. Never raises — friendly fallback.
     """
-    # EXPLICIT language detection on the user's own message (not left to the model):
-    # any Arabic-script char → Egyptian Arabic, otherwise English.
+    # EXPLICIT language detection on the user's own message (not left to the model).
     lang = _detect_language(message)
 
-    # ── Guard: API key ───────────────────────────────────────────────────────
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         logger.error("OPENAI_API_KEY env var is not set")
         return _fallback(lang, "no_key")
 
-    # ── Build messages ───────────────────────────────────────────────────────
     ctx_block    = _build_context_block(trip_context)
     user_content = message + ctx_block
 
-    # Hard, per-request language directive — pass the DETECTED language so the model
-    # can't infer/guess it (fixes English-in → Arabic-out).
+    # Hard, per-request language directive so the model can't infer/guess language.
     lang_name = "Egyptian Arabic (اللهجة المصرية العامية, NOT MSA/فصحى)" \
                 if lang == "ar" else "English"
     lang_rule = (f"The user spoke {lang_name}. Reply ONLY in {lang_name}. "
@@ -276,30 +316,89 @@ async def _run_chat(message: str, trip_context: Optional[TripContext]) -> ChatRe
         {"role": "user",   "content": user_content},
     ]
 
-    # ── Call OpenAI directly via httpx (no openai package needed) ────────────
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type":  "application/json",
+    }
+
+    async def _call(client: "httpx.AsyncClient", msgs: list, with_tools: bool) -> dict:
+        payload = {
+            "model":       OPENAI_MODEL,
+            "messages":    msgs,
+            "max_tokens":  MAX_TOKENS,
+            "temperature": CHAT_TEMP,   # variety so replies never sound scripted
+        }
+        if with_tools:
+            payload["tools"]       = [ADD_STOP_TOOL]
+            payload["tool_choice"] = "auto"
+        r = await client.post(OPENAI_CHAT_URL, headers=headers, json=payload)
+        r.raise_for_status()
+        return r.json()
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                OPENAI_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type":  "application/json",
-                },
-                json={
-                    "model":       OPENAI_MODEL,
-                    "messages":    messages,
-                    "max_tokens":  MAX_TOKENS,
-                    "temperature": CHAT_TEMP,   # variety so replies never sound scripted
-                    # ── Phase 3 hook — add "tools": [...] here for action support ──
-                },
-            )
-            response.raise_for_status()
-            data       = response.json()
-            reply_text = data["choices"][0]["message"]["content"].strip()
-            tokens     = data.get("usage", {}).get("total_tokens", "?")
+            data = await _call(client, messages, with_tools=True)
+            msg  = data["choices"][0]["message"]
+            tool_calls = msg.get("tool_calls") or []
 
-        if not reply_text:
-            return _fallback(lang, "error")
+            # ── Normal Q&A (no tool) — unchanged behavior ────────────────────
+            if not tool_calls:
+                reply_text = (msg.get("content") or "").strip()
+                if not reply_text:
+                    return _fallback(lang, "error")
+                reply_lang = _detect_language(reply_text)
+                logger.info(f"assistant_chat: in_lang={lang} reply_lang={reply_lang} action=none")
+                return ChatResponse(reply=reply_text, language=reply_lang, action=None)
+
+            # ── Tool call(s) → resolve add_stop, then 2nd call for the confirm line ──
+            action: Optional[dict] = None
+            tool_msgs: list = []
+            for tc in tool_calls:
+                fn = tc.get("function") or {}
+                if fn.get("name") == "add_stop" and action is None:
+                    try:
+                        cat = (json.loads(fn.get("arguments") or "{}") or {}).get("category")
+                    except Exception:
+                        cat = None
+                    lat = getattr(trip_context, "user_lat", None) if trip_context else None
+                    lng = getattr(trip_context, "user_lng", None) if trip_context else None
+
+                    results = []
+                    if cat and lat is not None and lng is not None:
+                        results = await resolve_nearby(lat, lng, category=cat, limit=1)
+
+                    if results:
+                        pl = results[0]
+                        action = {
+                            "type": "add_stop", "name": pl.name,
+                            "lat": pl.lat, "lng": pl.lng, "address": pl.address,
+                            "distance_m": pl.distance_m, "needs_confirm": True,
+                        }
+                        tool_result = {"found": True, "name": pl.name,
+                                       "distance_m": pl.distance_m, "category": cat}
+                    else:
+                        reason = "no_location" if (lat is None or lng is None) else "no_result"
+                        tool_result = {"found": False, "reason": reason, "category": cat}
+                    tool_msgs.append({"role": "tool", "tool_call_id": tc.get("id"),
+                                      "content": json.dumps(tool_result, ensure_ascii=False)})
+                else:
+                    # Every tool_call MUST get a tool result before the next turn.
+                    tool_msgs.append({"role": "tool", "tool_call_id": tc.get("id"),
+                                      "content": json.dumps({"error": "unsupported"})})
+
+            assistant_turn = {"role": "assistant", "content": msg.get("content"),
+                              "tool_calls": tool_calls}
+            followup = messages + [assistant_turn] + tool_msgs + [
+                {"role": "system", "content": _ADD_STOP_FOLLOWUP},
+            ]
+            data2 = await _call(client, followup, with_tools=False)
+            reply_text = (data2["choices"][0]["message"].get("content") or "").strip()
+            if not reply_text:
+                reply_text = _fallback(lang, "error").reply
+            reply_lang = _detect_language(reply_text)
+            logger.info(f"assistant_chat: in_lang={lang} reply_lang={reply_lang} "
+                        f"action={'add_stop' if action else 'add_stop_none'}")
+            return ChatResponse(reply=reply_text, language=reply_lang, action=action)
 
     except httpx.TimeoutException:
         logger.warning("OpenAI request timed out")
@@ -310,15 +409,6 @@ async def _run_chat(message: str, trip_context: Optional[TripContext]) -> ChatRe
     except Exception as e:
         logger.error(f"Unexpected assistant error: {e}")
         return _fallback(lang, "error")
-
-    # Report the language of the ACTUAL reply text (not a guess from the input),
-    # so the `language` field always matches what the assistant actually said.
-    reply_lang = _detect_language(reply_text)
-
-    logger.info(f"assistant_chat: model={OPENAI_MODEL} in_lang={lang} "
-                f"reply_lang={reply_lang} tokens_used={tokens}")
-
-    return ChatResponse(reply=reply_text, language=reply_lang)
 
 
 async def _transcribe_audio(
@@ -488,6 +578,7 @@ async def assistant_voice(
         "reply":        chat.reply,
         "language":     chat.language,
         "audio_base64": audio_b64,
+        "action":       chat.action,   # null for normal replies; add_stop action otherwise
     }
 
 
