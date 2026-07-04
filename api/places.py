@@ -357,6 +357,7 @@ class AlongRoutePoisRequest(BaseModel):
     route: Optional[List[List[float]]] = None       # GeoJSON LineString [[lng,lat],...]
     polyline6: Optional[str] = None                 # alternative: encoded polyline (precision 6)
     max_results: int = 15
+    nearest: bool = False                           # True → nearest to the user (ignore route)
 
 
 class AlongRoutePoi(BaseModel):
@@ -542,6 +543,36 @@ async def along_route_pois(req: AlongRoutePoisRequest):
     if gtype is None:
         logger.warning(f"along_route_pois: unknown category={req.category!r}")
         return AlongRoutePoisResponse(source="none", results=[])
+
+    # NEAREST-TO-ME mode: closest of the category to the user's current location,
+    # regardless of route. Circle search (searchNearby, rank=DISTANCE) around the
+    # user; along_route_distance_m carries the straight-line distance so the
+    # client's cards/sort work unchanged.
+    if req.nearest:
+        cl = req.current_location
+        data = await _google_post(PLACES_NEARBY_URL, {
+            "includedTypes": [gtype], "maxResultCount": min(req.max_results, 20),
+            "rankPreference": "DISTANCE",
+            "locationRestriction": {"circle": {
+                "center": {"latitude": cl.lat, "longitude": cl.lng},
+                "radius": 5000.0}}}, PLACES_POI_FIELD_MASK, debug_label=f"nearest {category}")
+        out: List[AlongRoutePoi] = []
+        for p in ((data or {}).get("places") or []):
+            loc = p.get("location") or {}
+            plat, plng = loc.get("latitude"), loc.get("longitude")
+            if plat is None or plng is None:
+                continue
+            d = int(round(_haversine_m(cl.lat, cl.lng, float(plat), float(plng))))
+            out.append(AlongRoutePoi(
+                id=p.get("id") or f"near/{len(out)}",
+                name=_fix_mojibake((p.get("displayName") or {}).get("text") or "") or "Place",
+                lat=float(plat), lng=float(plng), category=category,
+                distance_from_route_m=d, along_route_distance_m=d,
+                address=_fix_mojibake(p.get("formattedAddress") or None)))
+        out.sort(key=lambda r: r.along_route_distance_m)
+        logger.info(f"along_route_pois NEAREST: category={category} hits={len(out)}")
+        return AlongRoutePoisResponse(source="google" if out else "none",
+                                      results=out[:req.max_results])
 
     route = _parse_route(req)
     if len(route) < 2:

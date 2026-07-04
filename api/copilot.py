@@ -99,10 +99,17 @@ ACTIONS — you can DO things, not just talk:
 - Use your tools whenever the user wants something done or shown: finding
   places, adding stops, alternatives, rerouting via a road, camera views,
   muting guidance, reporting incidents, ending navigation.
-- Mutating actions (adding a stop, switching route, rerouting, reporting,
-  ending navigation) are ALWAYS proposed first: state exactly what you're
-  about to do in one sentence and ASK for confirmation. Execution only
-  happens after the user confirms.
+- When the user's request is clear (e.g. "add the nearest gas station"), call
+  the tool RIGHT AWAY — do not ask a clarifying question first. Asking, then
+  calling the tool, then asking AGAIN is wrong: it double-prompts the user.
+- Mutating actions (add stop, switch route, reroute, report, end navigation)
+  are PROPOSALS. After the tool previews it on the map, say in ONE short
+  sentence what you're about to do and ask ONE yes/no question. That is the
+  ONLY confirmation you give — a Confirm/Cancel button is already on screen,
+  so do not ask twice or in two different ways.
+- NEVER speak as if a mutating action is already done. Do NOT say "I've added
+  it / done / added the stop" — nothing is applied until the user confirms.
+  Use future/proposal wording only ("want me to add it?", "أضيفها؟").
 - View-only actions (showing places, alternatives, overview, zoom) happen
   immediately — narrate what's now on screen, then offer the logical next
   step as a question.
@@ -114,9 +121,11 @@ it naturally (stops already added, things already discussed)."""
 
 _TOOL_FOLLOWUP = (
     "Tool result received. Reply in the user's language, 1–2 short spoken "
-    "sentences. If the tool found something, name it with its distance and — "
-    "if the action needs confirmation — ask a natural yes/no question. If it "
-    "found nothing, say so plainly and suggest the closest alternative move."
+    "sentences. If the tool found something, name it with its distance. If the "
+    "result note says the action needs confirmation, ask exactly ONE short "
+    "yes/no question and DO NOT claim it's done — it is only a preview until "
+    "the user confirms (never say 'added' / 'done' / 'اتضافت'). If it found "
+    "nothing, say so plainly and suggest the closest alternative move."
 )
 
 # ── Tools (OpenAI function-calling schema) ────────────────────────────────────
@@ -129,15 +138,19 @@ def _tool(name: str, desc: str, props: Dict[str, Any], required: List[str]) -> D
 
 _TOOLS: List[Dict] = [
     _tool("show_pois",
-          "Find and display places of a category along the remaining route "
-          "(pins on the map). Use when the user asks to see/find gas stations, "
-          "restaurants, cafes, ATMs, parking or pharmacies.",
-          {"category": {"type": "string", "enum": _CATEGORIES}}, ["category"]),
+          "Find and display places of a category (pins on the map). Use when "
+          "the user asks to see/find gas stations, restaurants, cafes, ATMs, "
+          "parking or pharmacies. mode='route' (default) = along the remaining "
+          "route; mode='nearest' = closest to the user's CURRENT location "
+          "regardless of route (use when they say 'near me' / 'nearest to me').",
+          {"category": {"type": "string", "enum": _CATEGORIES},
+           "mode": {"type": "string", "enum": ["route", "nearest"]}}, ["category"]),
     _tool("add_stop",
           "Propose adding ONE stop to the route (requires user confirmation). "
-          "Either the nearest of a category along the route, or a specific "
-          "named place.",
+          "The nearest of a category (along the route, or nearest to the user "
+          "if mode='nearest'), or a specific named place.",
           {"category": {"type": "string", "enum": _CATEGORIES},
+           "mode": {"type": "string", "enum": ["route", "nearest"]},
            "place_name": {"type": "string",
                           "description": "Specific place name if the user named one"}},
           []),
@@ -253,9 +266,10 @@ def _route_pts(ctx: Dict[str, Any]):
 
 
 async def _resolve_pois(ctx: Dict[str, Any], category: str,
-                        limit: int = POI_LIMIT) -> List[Dict]:
-    """Category POIs along the remaining route (corridor search, same engine as
-    /along-route/pois) with a circle-search fallback around the user."""
+                        limit: int = POI_LIMIT, nearest: bool = False) -> List[Dict]:
+    """Category POIs. nearest=False → along the remaining route (corridor search,
+    same engine as /along-route/pois). nearest=True → closest to the user's
+    current location regardless of route (circle search via resolve_nearby)."""
     gtype = {"fuel": "gas_station", "restaurant": "restaurant", "cafe": "cafe",
              "atm": "atm", "parking": "parking", "pharmacy": "pharmacy"}.get(category)
     if gtype is None:
@@ -263,7 +277,7 @@ async def _resolve_pois(ctx: Dict[str, Any], category: str,
     lat = ctx.get("user_lat"); lng = ctx.get("user_lng")
     pts = _route_pts(ctx)
     try:
-        if len(pts) >= 2:
+        if not nearest and len(pts) >= 2:
             remaining = geo.remaining_route(pts, (lat, lng)) if lat and lng else pts
             if len(remaining) >= 2:
                 cum = geo.cumulative_distances(remaining)
@@ -274,11 +288,19 @@ async def _resolve_pois(ctx: Dict[str, Any], category: str,
                     return [p.dict() for p in pois]
     except Exception as e:
         logger.warning(f"copilot corridor resolve failed: {e}")
-    # Fallback: nearest by straight distance around the user.
+    # Nearest-to-user (explicit nearest=True, or corridor fallback): straight-line
+    # closest around the user. resolve_nearby's category set is
+    # {gas_station,pharmacy,atm,restaurant,cafe}; map fuel→gas_station and use a
+    # text query for anything it doesn't support (e.g. parking).
     if lat is None or lng is None:
         return []
-    near_cat = "gas_station" if category == "fuel" else category
-    results = await resolve_nearby(lat, lng, category=near_cat, limit=limit)
+    supported = {"restaurant", "cafe", "atm", "pharmacy"}
+    if category == "fuel":
+        results = await resolve_nearby(lat, lng, category="gas_station", limit=limit)
+    elif category in supported:
+        results = await resolve_nearby(lat, lng, category=category, limit=limit)
+    else:  # parking and any other → free-text search
+        results = await resolve_nearby(lat, lng, query=category, limit=limit)
     return [{"id": f"near/{i}", "name": r.name, "lat": r.lat, "lng": r.lng,
              "category": category, "distance_from_route_m": 0,
              "along_route_distance_m": r.distance_m, "address": r.address}
@@ -304,24 +326,27 @@ async def _execute_tool(name: str, args: Dict[str, Any],
     try:
         if name == "show_pois":
             cat = args.get("category", "fuel")
-            pois = await _resolve_pois(ctx, cat)
+            nearest = args.get("mode") == "nearest"
+            pois = await _resolve_pois(ctx, cat, nearest=nearest)
             if not pois:
                 return {"found": False, "category": cat}, None
             brief = [{"name": p["name"],
-                      "km_ahead": round(p.get("along_route_distance_m", 0) / 1000.0, 1)}
+                      "km": round(p.get("along_route_distance_m", 0) / 1000.0, 1)}
                      for p in pois]
             action = {"type": "show_pois", "category": cat, "pois": pois,
-                      "requires_confirm": False}
+                      "mode": "nearest" if nearest else "route", "requires_confirm": False}
+            where = "nearest to the user" if nearest else "along the route"
             return {"found": True, "category": cat, "places": brief,
-                    "note": "Places are now shown on the map."}, action
+                    "note": f"Places ({where}) are now shown on the map."}, action
 
         if name == "add_stop":
             cat = args.get("category"); qname = args.get("place_name")
+            nearest = args.get("mode") == "nearest"
             place = None
             if qname:
                 place = await _resolve_place(ctx, qname)
             elif cat:
-                pois = await _resolve_pois(ctx, cat, limit=1)
+                pois = await _resolve_pois(ctx, cat, limit=1, nearest=nearest)
                 if pois:
                     p = pois[0]
                     place = {"name": p["name"], "lat": p["lat"], "lng": p["lng"],
@@ -330,8 +355,9 @@ async def _execute_tool(name: str, args: Dict[str, Any],
                 return {"found": False}, None
             action = {"type": "add_stop", "place": place, "requires_confirm": True}
             return {"found": True, "place": place["name"],
-                    "km_ahead": round(place.get("distance_m", 0) / 1000.0, 1),
-                    "note": "Previewed on the map. Ask the user to confirm."}, action
+                    "km": round(place.get("distance_m", 0) / 1000.0, 1),
+                    "note": "PREVIEW ONLY — nothing added yet. Ask ONE yes/no "
+                            "question to confirm; never say it's done."}, action
 
         if name == "show_alternatives":
             alts = ctx.get("alternatives") or []
@@ -346,7 +372,8 @@ async def _execute_tool(name: str, args: Dict[str, Any],
             idx = int(args.get("index", 1))
             action = {"type": "switch_route", "index": idx, "requires_confirm": True}
             return {"ok": True, "index": idx,
-                    "note": "Ask the user to confirm the switch."}, action
+                    "note": "PREVIEW ONLY — not switched yet. Ask ONE yes/no "
+                            "question; never say it's done."}, action
 
         if name == "reroute_via":
             via = args.get("via", "")
@@ -355,7 +382,8 @@ async def _execute_tool(name: str, args: Dict[str, Any],
                 return {"found": False, "via": via}, None
             action = {"type": "reroute_via", "point": place, "requires_confirm": True}
             return {"found": True, "via": place["name"],
-                    "note": "Reroute previewed. Ask the user to confirm."}, action
+                    "note": "PREVIEW ONLY — not rerouted yet. Ask ONE yes/no "
+                            "question; never say it's done."}, action
 
         if name == "zoom_to_place":
             place = await _resolve_place(ctx, args.get("place_name", ""))
@@ -378,10 +406,12 @@ async def _execute_tool(name: str, args: Dict[str, Any],
         if name == "report_incident":
             kind = args.get("kind", "hazard")
             return {"ok": True, "kind": kind,
-                    "note": "Ask the user to confirm the report."}, \
+                    "note": "NOT reported yet. Ask ONE yes/no question; never "
+                            "say it's done."}, \
                    {"type": "report_incident", "kind": kind, "requires_confirm": True}
         if name == "cancel_navigation":
-            return {"ok": True, "note": "Ask the user to confirm ending navigation."}, \
+            return {"ok": True, "note": "NOT ended yet. Ask ONE yes/no question "
+                    "to confirm ending navigation; never say it's done."}, \
                    {"type": "cancel_navigation", "requires_confirm": True}
         return {"error": f"unknown tool {name}"}, None
     except Exception as e:
