@@ -77,6 +77,33 @@ CORRIDOR_BUFFER_M    = float(os.getenv("CORRIDOR_BUFFER_M", "1500"))  # Overpass
 CORRIDOR_WIDTH_M     = float(os.getenv("CORRIDOR_WIDTH_M", "800"))    # perp filter + circle radius
 MAX_DETOUR_CANDIDATES = int(os.getenv("MAX_DETOUR_CANDIDATES", "8"))
 MAX_CORRIDOR_ANCHORS  = int(os.getenv("MAX_CORRIDOR_ANCHORS", "12"))  # Google circle-search centres
+# Two-band corridor anchoring (fixes "nearest on route" misses): the old single
+# pass let sample_along WIDEN the spacing on long routes (12 anchors on a 70 km
+# route → ~6.4 km between 800 m circles → most of the corridor never searched,
+# so a station 4 km ahead was missed and a 70 km one "won"). Near band uses a
+# spacing smaller than 2× the circle radius → CONTIGUOUS coverage of the first
+# ~18 km; a sparse far band still finds distant options.
+CORRIDOR_NEAR_SPACING_M = float(os.getenv("CORRIDOR_NEAR_SPACING_M", "1500"))
+CORRIDOR_NEAR_ANCHORS   = int(os.getenv("CORRIDOR_NEAR_ANCHORS", "12"))
+CORRIDOR_FAR_ANCHORS    = int(os.getenv("CORRIDOR_FAR_ANCHORS", "8"))
+
+
+def corridor_anchors(remaining, cum):
+    """Anchor centres for the corridor circle-search: gapless near band (first
+    NEAR_SPACING×NEAR_ANCHORS metres) + sparse far band over the remainder."""
+    near_len = CORRIDOR_NEAR_SPACING_M * CORRIDOR_NEAR_ANCHORS
+    if not cum or cum[-1] <= near_len:
+        return geo.sample_along(remaining, cum, CORRIDOR_NEAR_SPACING_M,
+                                CORRIDOR_NEAR_ANCHORS)
+    split = next(k for k in range(len(cum)) if cum[k] >= near_len)
+    prefix, pcum = remaining[:split + 1], cum[:split + 1]
+    rest = remaining[split:]
+    rcum = [c - cum[split] for c in cum[split:]]
+    anchors = geo.sample_along(prefix, pcum, CORRIDOR_NEAR_SPACING_M,
+                               CORRIDOR_NEAR_ANCHORS)
+    anchors += geo.sample_along(rest, rcum, CORRIDOR_NEAR_SPACING_M,
+                                CORRIDOR_FAR_ANCHORS)
+    return anchors
 
 # Category → Google Places (New) primary type. Kept 1:1 and explicit so the app's
 # allowed categories can't silently map to an unexpected Google type.
@@ -584,7 +611,7 @@ async def along_route_pois(req: AlongRoutePoisRequest):
     if len(remaining) < 2:
         return AlongRoutePoisResponse(source="none", results=[])
     cum = geo.cumulative_distances(remaining)
-    anchors = geo.sample_along(remaining, cum, CORRIDOR_WIDTH_M, MAX_CORRIDOR_ANCHORS)
+    anchors = corridor_anchors(remaining, cum)   # two-band: gapless near + sparse far
 
     # 1) Google (primary)
     raw = await _google_corridor_pois(gtype, anchors)

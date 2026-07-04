@@ -52,7 +52,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api.places import resolve_nearby, _google_corridor_pois, _filter_to_corridor
+from api.places import resolve_nearby, _google_corridor_pois, _filter_to_corridor, corridor_anchors
 from services import route_geometry as geo
 
 logger = logging.getLogger("routemind.copilot")
@@ -84,14 +84,25 @@ VOICE & TONE (your words are spoken aloud by TTS — write for the EAR):
 - Vary your phrasing — never open two replies the same way in one trip.
 - Round numbers like a human ("about ten minutes", "two kilometers").
 
-LANGUAGE:
-- Mirror the user's language EXACTLY, per message. Arabic in → Egyptian
-  colloquial Arabic out (masri, NOT فصحى). English in → natural English out.
+LANGUAGE — you are FULLY BILINGUAL (Egyptian Arabic + English):
+- Mirror the user's language per message: Arabic in → Egyptian colloquial
+  Arabic out (masri, NOT فصحى). English in → natural English out.
+- If the user asks for a specific language ("speak Arabic", "بالعربي"), switch
+  to it and stay in it. NEVER claim you cannot speak Arabic or English — you
+  speak both natively.
 
-TRUTH:
+TRUTH — never fabricate, ever:
 - For anything about the trip (roads, ETA, traffic, cameras, alternatives,
-  stops) use ONLY the [Current trip data] block. Never invent road names,
-  counts or distances. If the data isn't there, say you don't have it.
+  stops, distances) use ONLY the [Current trip data] block. NEVER invent or
+  estimate a number, road name, or condition that isn't in the data — a
+  made-up "traffic is moderate" is a serious failure.
+- Read the data precisely: "Traffic ahead: none detected" means the road is
+  clear — say that confidently. A missing field means you genuinely don't
+  have that data — say so honestly in one short sentence, and offer what you
+  DO know instead (e.g. the ETA) or ask a clarifying question.
+- INTENT PRECISION: "nearest X to me / near me / around here" → mode='nearest'
+  (closest to the user's location, ignore the route). "on my route / on the
+  way / ahead" → mode='route'. Get this right — they are different searches.
 - General questions (history, food, football, anything) — answer them! Briefly,
   and when natural, tie back to the drive.
 
@@ -226,6 +237,11 @@ def _format_context(ctx: Dict[str, Any]) -> str:
             km = s.get("distance_km", s.get("distance_ahead_km", "?"))
             return f"{s.get('road','road')}: {s.get('level','?')} at {km} km"
         L.append("Traffic ahead: " + " | ".join(seg_line(s) for s in segs[:5]))
+    elif pick("remaining_km", "remaining_distance_km") is not None:
+        # The clients only emit segments where congestion EXISTS — an empty list
+        # with live route data means the road is genuinely clear. Saying so here
+        # lets the model answer "how's traffic" confidently instead of guessing.
+        L.append("Traffic ahead: none detected — remaining route currently clear")
     cams = ctx.get("cameras_ahead") or []
     if cams:
         def cam_line(c):
@@ -281,7 +297,7 @@ async def _resolve_pois(ctx: Dict[str, Any], category: str,
             remaining = geo.remaining_route(pts, (lat, lng)) if lat and lng else pts
             if len(remaining) >= 2:
                 cum = geo.cumulative_distances(remaining)
-                anchors = geo.sample_along(remaining, cum, 800.0, 12)
+                anchors = corridor_anchors(remaining, cum)  # gapless near + sparse far
                 raw = await _google_corridor_pois(gtype, anchors)
                 pois = _filter_to_corridor(raw, remaining, cum, category, limit)
                 if pois:
@@ -330,14 +346,18 @@ async def _execute_tool(name: str, args: Dict[str, Any],
             pois = await _resolve_pois(ctx, cat, nearest=nearest)
             if not pois:
                 return {"found": False, "category": cat}, None
+            dist_key = "km_from_you" if nearest else "km_ahead_on_route"
             brief = [{"name": p["name"],
-                      "km": round(p.get("along_route_distance_m", 0) / 1000.0, 1)}
+                      dist_key: round(p.get("along_route_distance_m", 0) / 1000.0, 1)}
                      for p in pois]
             action = {"type": "show_pois", "category": cat, "pois": pois,
                       "mode": "nearest" if nearest else "route", "requires_confirm": False}
-            where = "nearest to the user" if nearest else "along the route"
+            where = ("straight-line from the user's location (NOT on the route)"
+                     if nearest else "ahead along the route")
             return {"found": True, "category": cat, "places": brief,
-                    "note": f"Places ({where}) are now shown on the map."}, action
+                    "distances_are": where,
+                    "note": "Places are now shown on the map. Phrase distances "
+                            "accordingly."}, action
 
         if name == "add_stop":
             cat = args.get("category"); qname = args.get("place_name")
@@ -354,10 +374,12 @@ async def _execute_tool(name: str, args: Dict[str, Any],
             if not place:
                 return {"found": False}, None
             action = {"type": "add_stop", "place": place, "requires_confirm": True}
+            dist_key = "km_from_you" if (nearest and not qname) else "km_ahead_on_route"
             return {"found": True, "place": place["name"],
-                    "km": round(place.get("distance_m", 0) / 1000.0, 1),
+                    dist_key: round(place.get("distance_m", 0) / 1000.0, 1),
                     "note": "PREVIEW ONLY — nothing added yet. Ask ONE yes/no "
-                            "question to confirm; never say it's done."}, action
+                            "question to confirm; never say it's done. Phrase the "
+                            "distance per the key name (from you vs on route)."}, action
 
         if name == "show_alternatives":
             alts = ctx.get("alternatives") or []
@@ -496,9 +518,21 @@ async def copilot_converse(req: ConverseRequest):
         ctx = req.context or {}
         user_text = history[-1]["content"]
         lang = _detect_lang(user_text, req.app_lang)
-        lang_rule = ("The user spoke Egyptian Arabic. Reply ONLY in Egyptian "
-                     "colloquial Arabic (masri)." if lang == "ar" else
-                     "The user spoke English. Reply ONLY in natural English.")
+        # ITEM 1 FIX — the old rule was an absolute prohibition ("Reply ONLY in
+        # English. Do not use any other language") so an English request like
+        # "speak Arabic" made the model literally REFUSE ("I can't speak Arabic").
+        # New rule: default = mirror the detected language, with an explicit
+        # exception honoring a requested language. Injected as its own SYSTEM
+        # message right before the user turn (stronger adherence than the old
+        # parenthetical buried after the English context block).
+        lang_rule = (
+            ("This user message is in Egyptian Arabic → reply in Egyptian "
+             "colloquial Arabic (masri, NOT فصحى)." if lang == "ar" else
+             "This user message is in English → reply in natural English.")
+            + " EXCEPTION: if the user asks for a specific language (e.g. "
+              "'speak Arabic', 'بالعربي', 'in English'), reply in the REQUESTED "
+              "language — you are fully fluent in both and must never claim "
+              "you can't speak Arabic or English.")
         ctx_block = _format_context(ctx)
         pending = ""
         if req.pending_action:
@@ -507,8 +541,11 @@ async def copilot_converse(req: ConverseRequest):
 
         messages: List[Dict[str, Any]] = [{"role": "system", "content": _SYSTEM}]
         messages += history[:-1]
+        messages.append({"role": "system", "content": "LANGUAGE: " + lang_rule})
         messages.append({"role": "user",
-                         "content": f"{user_text}\n\n{ctx_block}{pending}\n\n({lang_rule})"})
+                         "content": f"{user_text}\n\n{ctx_block}{pending}"})
+        logger.info(f"copilot turn: detected_lang={lang} app_lang={req.app_lang} "
+                    f"history={len(history)}")
 
         spoke = False           # any delta text emitted
         full_text = []          # for expects_reply heuristic
