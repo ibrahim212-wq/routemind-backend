@@ -41,30 +41,39 @@ except Exception:  # pragma: no cover — missing tzdata; fall back to fixed UTC
 # ─────────────────────────────────────────────────────────────────
 
 # Levels are aligned 1:1 with the plan-drive slot scale so that scanner alerts
-# and the on-screen slots agree. The route-level Google jam_factor (0..1, the
-# SAME signal/formula the slots use) is mapped onto this 0..10 scale (×10):
-#   slot LIGHT    jam01>=0.15  → ADVISORY  (1.5)   — no alert
-#   slot MODERATE jam01>=0.32  → WARNING   (3.2)   — alert
-#   slot HIGH     jam01>=0.55  → SERIOUS   (5.5)   — alert
-#   slot VERY_HIGH jam01>=0.80 → CRITICAL  (8.0)   — alert
-# Empirically (Cairo, 2026-06-16): Salah Salem jam01≈0.17→ADVISORY (quiet, no
-# alert), 6 Oct Bridge ≈0.44→WARNING, Ring Road ≈0.64→SERIOUS. The old
-# micro-segment speed-ratio signal maxed jam01≈0.10 city-wide, so it could
-# never cross WARNING — that was cause (B).
+# and the on-screen slots agree. The route-level jam_factor (0..1, formula
+# (ratio-1)/0.50 vs a TRUE free-flow baseline — Google's predicted duration at
+# 3:30 AM Cairo, see google_traffic.get_google_route_congestion) maps onto this
+# 0..10 scale (×10):
+#   slot LIGHT     jam01>=0.15 (ratio 1.075) → ADVISORY (1.5) — no alert
+#   slot MODERATE  jam01>=0.32 (ratio 1.16)  → WARNING  (3.2) — alert
+#   slot HIGH      jam01>=0.55 (ratio 1.275) → SERIOUS  (5.5) — alert
+#   slot VERY_HIGH jam01>=0.80 (ratio 1.40)  → CRITICAL (8.0) — alert
+# Empirically (Cairo, Thursday 16:10 rush, 2026-07-16, night baseline): Ring
+# Road ratio 1.40-1.51, 6 Oct Bridge 1.50, Abbas El-Akkad 1.50, Salah Salem
+# 1.20 — rush hour lands solidly in WARNING..CRITICAL, quiet hours in FREE.
 JAM_LEVELS = [
-    (8.0, "CRITICAL"),   # jam01 >= 0.80  (slot VERY_HIGH)
-    (5.5, "SERIOUS"),    # jam01 >= 0.55  (slot HIGH)
-    (2.5, "WARNING"),    # jam01 >= 0.25  (ratio >= ~1.125) — catches moderate Cairo rush-hour
-    (1.5, "ADVISORY"),   # jam01 >= 0.15  (slot LIGHT)
+    (8.0, "CRITICAL"),   # jam01 >= 0.80  (slot VERY_HIGH, ratio >= 1.40)
+    (5.5, "SERIOUS"),    # jam01 >= 0.55  (slot HIGH,      ratio >= 1.275)
+    (3.2, "WARNING"),    # jam01 >= 0.32  (slot MODERATE,  ratio >= 1.16)
+    (1.5, "ADVISORY"),   # jam01 >= 0.15  (slot LIGHT,     ratio >= 1.075)
     (0.0, "FREE"),
 ]
 
-MIN_ALERT_INTERVAL_MINUTES = 15
+LEVEL_ORDER = ["FREE", "ADVISORY", "WARNING", "SERIOUS", "CRITICAL"]
 
-# لو باقي على leave_by أقل من ده وكله فاضي → ابعت ALL_CLEAR
-# 20 دقيقة + scan كل 10 دقايق = مضمون إن scan واحد على الأقل يقع في الـ window
-# فالـ user بياخد "اتحرك في معادك" حوالي 10 دقايق قبل القيام
-ALL_CLEAR_WINDOW_MINUTES = 20
+# Ratios alone overstate short trips (a 10-min trip at ratio 1.30 is +3 min —
+# not worth waking anyone up). Absolute-delay floors demote the level until the
+# delay in MINUTES actually justifies the word we're about to use.
+_DELAY_FLOOR_CRITICAL = 18
+_DELAY_FLOOR_SERIOUS  = 10
+_DELAY_FLOOR_WARNING  = 5
+
+# Pre-departure guarantee: every active trip gets exactly one send inside this
+# window — a congestion reminder if the route is slow, ALL_CLEAR if it isn't.
+# 20 min window + 10-min scan cadence ⇒ the send lands ~10 min before leave_by.
+PRE_DEPARTURE_WINDOW_MINUTES = 20
+ALL_CLEAR_WINDOW_MINUTES     = PRE_DEPARTURE_WINDOW_MINUTES  # back-compat alias
 
 # ─────────────────────────────────────────────────────────────────
 # Geo + Level helpers
@@ -287,44 +296,80 @@ def _ensemble(
 # Anti-spam + Storage
 # ─────────────────────────────────────────────────────────────────
 
-async def _should_send_alert(
-    trip_id: str,
-    junction_id: str,
-    level: str,
-    supabase: SupabaseClient,
-) -> bool:
-    # FREE + ADVISORY = طريق سالك — مش بنبعت congestion alert
-    # (قبل كده ADVISORY كان بيبعت alert وده كان بيمنع الـ ALL_CLEAR
-    #  من إنه يتبعت رغم إن route_is_clear بيعتبر ADVISORY فاضي — تناقض)
-    if level in ("FREE", "ADVISORY"):
-        return False
+def _apply_delay_floors(level: str, delay_min: int) -> str:
+    """Demote the level until the absolute delay justifies it (see floors)."""
+    if level == "CRITICAL" and delay_min < _DELAY_FLOOR_CRITICAL:
+        level = "SERIOUS"
+    if level == "SERIOUS" and delay_min < _DELAY_FLOOR_SERIOUS:
+        level = "WARNING"
+    if level == "WARNING" and delay_min < _DELAY_FLOOR_WARNING:
+        level = "ADVISORY"
+    return level
 
-    # Escalation-only dedup (mirrors the final_clear_sent "send once" intent):
-    # resend ONLY if this level is strictly higher than the highest level already
-    # alerted for the trip. Same-or-lower = no resend, with NO time window — the
-    # old 15-min cutoff was the spam source (#4): once it expired a still-congested
-    # trip re-alerted every cycle. Latest recorded alert == highest, because lower
-    # levels are suppressed and never get an alert_sent row.
+
+async def _decide_alert(
+    trip_id: str,
+    level: str,
+    delay_min: int,
+    supabase: SupabaseClient,
+) -> Tuple[Optional[str], Optional[int]]:
+    """
+    Alert state machine. Compares this scan against the LAST congestion alert
+    actually sent for the trip and returns (kind, prev_delay_min):
+
+      "new"         — first congestion alert for this trip (level ≥ WARNING)
+      "escalation"  — level rose, or the delay grew by ≥ 10 min at the same level
+      "improvement" — was alerted congested, now clearly better (sent once)
+      None          — nothing worth sending (unchanged / still clear)
+
+    Reminder / ALL_CLEAR sends are excluded from the comparison (jsonb kind).
+    """
     try:
         res = (supabase.table("scan_results")
-               .select("alert_level")
+               .select("alert_level,upstream_junctions,scanned_at")
                .eq("trip_id", trip_id)
-               .eq("junction_id", junction_id)
                .eq("alert_sent", True)
+               .eq("prediction_source", "google_routes")
                .order("scanned_at", desc=True)
-               .limit(1)
+               .limit(8)
                .execute())
-
-        if res.data:
-            last_level  = res.data[0]["alert_level"]
-            level_order = ["FREE", "ADVISORY", "WARNING", "SERIOUS", "CRITICAL"]
-            if (last_level in level_order and level in level_order
-                    and level_order.index(level) <= level_order.index(last_level)):
-                return False
+        rows = [
+            r for r in (res.data or [])
+            if r.get("alert_level") not in (None, "ALL_CLEAR")
+            and not (isinstance(r.get("upstream_junctions"), dict)
+                     and r["upstream_junctions"].get("kind") == "reminder")
+        ]
     except Exception as e:
-        logger.warning(f"Anti-spam check failed: {e}")
+        logger.warning(f"alert-decision read failed for {trip_id}: {e}")
+        rows = []
 
-    return True
+    congested_now = level in ("WARNING", "SERIOUS", "CRITICAL")
+
+    if not rows:
+        return ("new", None) if congested_now else (None, None)
+
+    last       = rows[0]
+    last_level = last.get("alert_level") or "FREE"
+    uj         = last.get("upstream_junctions")
+    last_delay = uj.get("delay_min") if isinstance(uj, dict) else None
+
+    li = LEVEL_ORDER.index(last_level) if last_level in LEVEL_ORDER else 0
+    ci = LEVEL_ORDER.index(level)      if level in LEVEL_ORDER      else 0
+
+    if congested_now and (
+            ci > li
+            or (last_delay is not None and delay_min >= int(last_delay) + 10)):
+        return ("escalation", last_delay)
+
+    # Was congested, now clearly better → one good-news send. The improvement
+    # row itself becomes the new comparison point, so it never repeats.
+    if li >= LEVEL_ORDER.index("WARNING") and (
+            ci <= LEVEL_ORDER.index("ADVISORY")
+            or ci <= li - 2
+            or (last_delay is not None and delay_min <= int(last_delay) - 10)):
+        return ("improvement", last_delay)
+
+    return (None, last_delay)
 
 
 async def _store_readings(readings: List[Dict], supabase: SupabaseClient) -> None:
@@ -464,15 +509,19 @@ def _pattern_ensemble(jid: str, arrival) -> float:
 
 
 def _distribute_delay_scan(spots: List[Dict], total_delay: int) -> None:
-    """Component F: distribute the real Google delay across predicted-congested
-    junctions so per-junction delay_min sums EXACTLY to total_delay (same logic
-    as Phase 1 _distribute_delay; replicated here to avoid a trip_alert import)."""
+    """Component F: distribute the real Google delay across the WORST 3
+    congested junctions so per-junction delay_min sums EXACTLY to total_delay.
+    Concentrating on 3 (instead of spreading over every hotspot) keeps the
+    map chips meaningful — "+6 min" on the worst stretch instead of "+2 min"
+    everywhere under a "+17 min" headline."""
     for s in spots:
         s["delay_min"] = 0
     if total_delay <= 0:
         return
-    weighted = [(s, s["jam10"] / 10.0) for s in spots
-                if s["level"] in ("WARNING", "SERIOUS", "CRITICAL")]
+    hot = sorted((s for s in spots
+                  if s["level"] in ("WARNING", "SERIOUS", "CRITICAL")),
+                 key=lambda s: s["jam10"], reverse=True)[:3]
+    weighted = [(s, s["jam10"] / 10.0) for s in hot]
     wsum = sum(w for _, w in weighted)
     if wsum <= 0:
         if spots:
@@ -669,6 +718,58 @@ async def _analyze_route_junctions(
     return spots, route_jam
 
 
+def _route_waypoints_for_congestion(trip: Dict, max_points: int = 8) -> List[Dict]:
+    """Evenly sample the trip's stored route_polyline ([lat, lng] pairs) into
+    via-waypoints so the Google congestion call is pinned to the USER'S route
+    instead of whatever detour is currently fastest."""
+    poly = trip.get("route_polyline") or []
+    if not isinstance(poly, list) or len(poly) < 4:
+        return []
+    try:
+        pts = [(float(p[0]), float(p[1])) for p in poly
+               if isinstance(p, (list, tuple)) and len(p) >= 2]
+    except (TypeError, ValueError):
+        return []
+    if len(pts) < 4:
+        return []
+    inner = pts[1:-1]
+    step  = max(1, len(inner) // max_points)
+    return [{"lat": la, "lng": ln} for la, ln in inner[::step]][:max_points]
+
+
+def _reconcile_spot_levels(spots: List[Dict], route_jam10: float) -> None:
+    """
+    Re-center per-junction jams on the route-level anchor (upward only).
+
+    WHY: Mapbox's congestion labels in Cairo are conservative — junctions read
+    "low" even in real rush hour, so spot jams average ~1-2 while the pinned
+    route-level measurement says 7-10. Without this the alert map renders a
+    green route under a "+16 min" headline. The route anchor is the truth for
+    MAGNITUDE; the live per-junction readings stay the truth for WHERE it is
+    worse or better — so we shift every spot up to the anchor and AMPLIFY the
+    relative differences (×3) so the map still shows which stretches are worst.
+    """
+    if not spots or not route_jam10:
+        return
+    target = min(float(route_jam10), 9.0)
+    mean   = sum(s["jam10"] for s in spots) / len(spots)
+    if target <= mean:
+        return
+    for s in spots:
+        adj = max(0.0, min(10.0, target + (s["jam10"] - mean) * 3.0))
+        s["jam10"] = round(adj, 2)
+        s["level"] = _jam_to_level(adj)
+
+
+def _worst_spot(spots: List[Dict]) -> Optional[Dict]:
+    """The most congested analyzed junction (WARNING+), for copy like
+    'the slow stretch hits ~12 min in'."""
+    hot = [s for s in spots if s.get("level") in ("WARNING", "SERIOUS", "CRITICAL")]
+    if not hot:
+        return None
+    return max(hot, key=lambda s: s.get("jam10", 0.0))
+
+
 async def scan_trip(
     trip: Dict,
     reverse_adj: Dict,          # built by run_intelligent_scan; empty from scan-now (lazy-built)
@@ -691,24 +792,24 @@ async def scan_trip(
         )
         return
 
-    # scan_results.junction_id wants a real junction id (anti-spam keys on it).
-    # Derive from the corridor if the trip was saved without any.
+    # Derive junction_ids from the corridor if the trip was saved without any,
+    # and WRITE THEM BACK into the in-memory trip — Phase 3 reads
+    # trip["junction_ids"], and skipping this writeback used to silently kill
+    # the whole per-junction analysis for safety-net trips (0 junctions).
     junction_ids = trip.get("junction_ids") or []
     if not junction_ids:
         junction_ids = _derive_junction_ids_for_trip(trip, supabase)
+        trip["junction_ids"] = junction_ids
     rep_junction = junction_ids[0] if junction_ids else dest_name
 
-    base_dur = float(trip.get("base_duration_seconds") or 0)
-
-    # Predicted congestion AT the user's departure time, from the SAME Google
-    # Routes source + jam formula the plan-drive slots use → alerts match slots.
-    # free_flow_seconds=None → use Google's own TRAFFIC_UNAWARE free-flow as the
-    # baseline (the stored base_duration_seconds was often inflated by congestion at
-    # trip-creation, masking real congestion: ratio<1 → jam=0 → no alerts).
+    # ── Route congestion AT the departure time, pinned to the user's route,
+    #    measured against a TRUE free-flow baseline (3:30 AM prediction) ──
+    waypoints = _route_waypoints_for_congestion(trip)
     cong = await get_google_route_congestion(
         o_lat, o_lng, d_lat, d_lng,
-        free_flow_seconds=None,
+        free_flow_seconds=trip.get("base_duration_seconds"),
         departure_utc=leave_by,
+        waypoints=waypoints,
     )
     if cong is None:
         logger.error(
@@ -716,71 +817,93 @@ async def scan_trip(
         )
         return
 
-    predicted_jam   = round(cong["jam_factor"] * 10, 2)   # 0..1 slot scale → 0..10 level scale
-    predicted_level = _jam_to_level(predicted_jam)
+    google_jam      = round(cong["jam_factor"] * 10, 2)   # 0..1 slot scale → 0..10
     scan_time       = now.isoformat()
     eta_minutes     = int(cong["live_seconds"] / 60)
-    # The one honest delay: extra minutes vs free-flow (live − free), never negative.
-    real_delay_min  = max(0, round((cong["live_seconds"] - cong["free_flow_seconds"]) / 60))
+    free_flow_sec   = cong["free_flow_seconds"]
+    google_delay    = max(0, round((cong["live_seconds"] - free_flow_sec) / 60))
 
     logger.info(
         f"Trip {trip_id}: route congestion live={cong['live_seconds']}s "
-        f"free={cong['free_flow_seconds']}s ratio={cong['congestion_ratio']:.2f} | "
-        f"jam={predicted_jam:.1f} | {predicted_level} | "
+        f"free={free_flow_sec}s ({cong.get('baseline_source')}) "
+        f"ratio={cong['congestion_ratio']:.2f} | google_jam={google_jam:.1f} | "
+        f"delay=+{google_delay}min | via={len(waypoints)}wp | "
         f"leave_by={leave_by.strftime('%H:%M')} | mins_to_depart={mins_to_departure:.0f}"
     )
 
-    # ── Phase 3: per-junction spatial-propagation analysis (Components A-C, F) ──
-    # Purely additive: enriches WHERE/severity and per-junction storage. The
-    # firing gate below stays Google-driven, so this can NEVER cause a false alert.
+    # ── Phase 3: per-junction spatial-propagation analysis (GCN graph feeders +
+    #    live Mapbox tiles + Prophet/historical patterns at each junction's ETA) ──
     radj = reverse_adj if reverse_adj else _ensure_reverse_adj()
     spots: List[Dict] = []
     route_predicted_jam: Optional[float] = None
     try:
         spots, route_predicted_jam = await _analyze_route_junctions(
             trip, cong, radj, now, leave_by)
-        _distribute_delay_scan(spots, real_delay_min)          # Component F
     except Exception as e:
         logger.warning(f"Trip {trip_id}: Phase 3 analysis failed ({e}) — Google-only fallback")
         spots, route_predicted_jam = [], None
 
-    # ── Component D: confidence classification (LOGGING ONLY — Google stays the
-    #    firing gate; the model never fires on its own, never suppresses a real
-    #    Google alert) ──
-    google_congested = predicted_level in ("WARNING", "SERIOUS", "CRITICAL")
-    model_congested  = (route_predicted_jam is not None
-                        and route_predicted_jam >= _MODEL_FIRE_JAM)
-    if   model_congested and google_congested:     confidence = "HIGH (model+Google agree)"
-    elif model_congested and not google_congested: confidence = "LOW (model only → suppressed, trust Google)"
-    elif google_congested and not model_congested: confidence = "ROUTE (Google only → route-level alert)"
-    else:                                          confidence = "CLEAR (both clear)"
+    # ── Combine Google + model into the final severity ──
+    # Google (route-pinned, true baseline) is the magnitude anchor. The model
+    # layer can now RAISE severity when it has live evidence: up to +2.5 jam
+    # (one level) above Google, capped at 6.5 (never model-only CRITICAL).
+    # Model delay uses the same buffer semantics as the plan-drive slots
+    # (duration multiplier = 1 + jam01·0.5).
+    model_jam       = route_predicted_jam or 0.0
+    has_live_model  = any(s.get("source") in ("live_mapbox", "feeder_blended")
+                          for s in spots)
+    model_delay_min = round(free_flow_sec * 0.5 * (model_jam / 10.0) / 60)
+
+    final_jam = google_jam
+    if model_jam >= _MODEL_FIRE_JAM and has_live_model and model_jam > google_jam:
+        final_jam = min(model_jam, google_jam + 2.5, 6.5)
+
+    real_delay_min = google_delay
+    if final_jam > google_jam:
+        real_delay_min = max(google_delay, model_delay_min)
+
+    predicted_level = _apply_delay_floors(_jam_to_level(final_jam), real_delay_min)
+    if predicted_level in ("WARNING", "SERIOUS", "CRITICAL"):
+        _reconcile_spot_levels(spots, final_jam)               # anchor map to route truth
+    _distribute_delay_scan(spots, real_delay_min)              # Component F
+
     logger.info(
-        f"Trip {trip_id}: Phase3 model_jam={route_predicted_jam} google_jam={predicted_jam} | "
-        f"{len(spots)} junctions analyzed | confidence={confidence}"
+        f"Trip {trip_id}: model_jam={route_predicted_jam} (live_evidence={has_live_model}, "
+        f"model_delay=+{model_delay_min}min) google_jam={google_jam} → "
+        f"final_jam={final_jam:.1f} {predicted_level} +{real_delay_min}min | "
+        f"{len(spots)} junctions analyzed"
     )
 
-    should_alert = await _should_send_alert(trip_id, rep_junction, predicted_level, supabase)
+    # ── Alert decision (new / escalation / improvement / none) ──
+    kind, prev_delay = await _decide_alert(trip_id, predicted_level, real_delay_min, supabase)
 
+    worst = _worst_spot(spots)
     await _store_scan_result({
         "trip_id":              trip_id,
         "junction_id":          rep_junction,
         "scanned_at":           scan_time,
         "user_eta_seconds":     cong["live_seconds"],
         "user_eta_datetime":    leave_by.isoformat(),
-        "upstream_junctions":   [],
-        "predicted_jam_factor": predicted_jam,
+        "upstream_junctions":   {
+            "delay_min":         real_delay_min,
+            "free_flow_seconds": free_flow_sec,
+            "google_jam":        google_jam,
+            "model_jam":         route_predicted_jam,
+            "baseline_source":   cong.get("baseline_source"),
+            "kind":              kind or "scan",
+            # minutes into the DRIVE (ETA from departure), not from now
+            "worst_lead_minutes": (round(worst["eta_seconds"] / 60.0, 1)
+                                   if worst and worst.get("eta_seconds") else None),
+        },
+        "predicted_jam_factor": round(final_jam, 2),
         "predicted_level":      predicted_level,
         "prediction_source":    "google_routes",
-        "alert_sent":           should_alert,
-        "alert_level":          predicted_level if should_alert else None,
-        "alert_sent_at":        scan_time if should_alert else None,
+        "alert_sent":           kind is not None,
+        "alert_level":          predicted_level if kind else None,
+        "alert_sent_at":        scan_time if kind else None,
     }, supabase)
 
     # ── Component E: per-junction model rows (additive, alert_sent=False) ──
-    # Same scanned_at as the google_routes rep row above. The rich extras
-    # (lat/lng/feeder_pressure/lead/delay/feeders) ride in the upstream_junctions
-    # jsonb column (no dedicated columns exist). trip_alert reads these rows
-    # (prediction_source != "google_routes"). Failure never breaks the scan.
     if spots:
         try:
             rows = [{
@@ -812,59 +935,74 @@ async def scan_trip(
         except Exception as e:
             logger.warning(f"Trip {trip_id}: per-junction storage failed ({e})")
 
-    # ── Congestion notification ──────────────────────────────────
+    # ── Congestion / improvement notification ──
     any_alert_sent = False
-    if should_alert:
+    if kind:
         any_alert_sent = True
-        await _send_congestion_notification(
-            user_id=user_id,
-            trip_id=trip_id,
-            dest_name=dest_name,
-            junction_id=rep_junction,
-            level=predicted_level,
-            jam_factor=predicted_jam,
-            eta_minutes=eta_minutes,
-            real_delay_min=real_delay_min,
-            supabase=supabase,
-        )
-
-    # ── ALL_CLEAR logic ──────────────────────────────────────────
-    # لو الطريق سالك + قرّب الميعاد + لسه مبعتناش all_clear
-    final_clear_sent = bool(trip.get("final_clear_sent", False))
-    route_is_clear   = (predicted_level in ("FREE", "ADVISORY")) and not any_alert_sent
-
-    if (route_is_clear
-            and not final_clear_sent
-            and 0 <= mins_to_departure <= ALL_CLEAR_WINDOW_MINUTES):
-
-        await _store_scan_result({
-            "trip_id":              trip_id,
-            "junction_id":          rep_junction,
-            "scanned_at":           scan_time,
-            "user_eta_seconds":     cong["live_seconds"],
-            "user_eta_datetime":    leave_by.isoformat(),
-            "upstream_junctions":   [],
-            "predicted_jam_factor": predicted_jam,
-            "predicted_level":      "ALL_CLEAR",
-            "prediction_source":    "google_routes",
-            "alert_sent":           True,
-            "alert_level":          "ALL_CLEAR",
-            "alert_sent_at":        scan_time,
-        }, supabase)
-
-        await _send_all_clear_notification(
-            user_id=user_id,
-            trip_id=trip_id,
-            dest_name=dest_name,
-            junction_id=rep_junction,
+        await _send_trip_alert_notification(
+            user_id=user_id, trip_id=trip_id, dest_name=dest_name,
+            junction_id=rep_junction, level=predicted_level, kind=kind,
+            jam_factor=final_jam, eta_minutes=eta_minutes,
+            delay_min=real_delay_min, prev_delay_min=prev_delay,
             leave_by=leave_by,
+            worst_lead_min=(round(worst["eta_seconds"] / 60.0, 1)
+                            if worst and worst.get("eta_seconds") else None),
             supabase=supabase,
         )
+
+    # ── Pre-departure guarantee: exactly one send inside the window ──
+    # Clear route → ALL_CLEAR. Congested route → "leaving soon, still slow"
+    # reminder. If ANY alert (new/escalation/improvement) just went out this
+    # same cycle, that send IS the pre-departure heads-up — don't double-send,
+    # just mark the window as covered.
+    final_clear_sent = bool(trip.get("final_clear_sent", False))
+    if (not final_clear_sent
+            and 0 <= mins_to_departure <= PRE_DEPARTURE_WINDOW_MINUTES):
+
+        route_is_clear = predicted_level in ("FREE", "ADVISORY")
+
+        if not any_alert_sent:
+            await _store_scan_result({
+                "trip_id":              trip_id,
+                "junction_id":          rep_junction,
+                "scanned_at":           scan_time,
+                "user_eta_seconds":     cong["live_seconds"],
+                "user_eta_datetime":    leave_by.isoformat(),
+                "upstream_junctions":   {
+                    "delay_min": real_delay_min,
+                    "free_flow_seconds": free_flow_sec,
+                    "kind": "all_clear" if route_is_clear else "reminder",
+                },
+                "predicted_jam_factor": round(final_jam, 2),
+                "predicted_level":      "ALL_CLEAR" if route_is_clear else predicted_level,
+                "prediction_source":    "google_routes",
+                "alert_sent":           True,
+                "alert_level":          "ALL_CLEAR" if route_is_clear else predicted_level,
+                "alert_sent_at":        scan_time,
+            }, supabase)
+
+            if route_is_clear:
+                await _send_all_clear_notification(
+                    user_id=user_id, trip_id=trip_id, dest_name=dest_name,
+                    junction_id=rep_junction, leave_by=leave_by,
+                    supabase=supabase)
+            else:
+                await _send_departure_reminder_notification(
+                    user_id=user_id, trip_id=trip_id, dest_name=dest_name,
+                    junction_id=rep_junction, level=predicted_level,
+                    delay_min=real_delay_min, leave_by=leave_by,
+                    supabase=supabase)
 
         _mark_clear_sent(trip_id, scan_time, supabase)
-        logger.info(f"Trip {trip_id}: ALL_CLEAR sent")
+        logger.info(
+            f"Trip {trip_id}: pre-departure send "
+            f"({'ALL_CLEAR' if route_is_clear else 'reminder' if not any_alert_sent else 'covered by alert'})"
+        )
 
-    logger.info(f"Trip {trip_id}: done | {predicted_level} (jam={predicted_jam:.1f})")
+    logger.info(
+        f"Trip {trip_id}: done | {predicted_level} (jam={final_jam:.1f}, "
+        f"+{real_delay_min}min) | alert_kind={kind}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -919,40 +1057,15 @@ def _get_fcm_tokens(user_id: str, supabase: SupabaseClient) -> List[str]:
         return []
 
 
-async def _send_congestion_notification(
+async def _send_fcm(
     user_id: str,
-    trip_id: str,
-    dest_name: str,
-    junction_id: str,
-    level: str,
-    jam_factor: float,
-    eta_minutes: int,
-    real_delay_min: int,
+    title: str,
+    body: str,
+    data: Dict[str, str],
     supabase: SupabaseClient,
+    log_tag: str,
 ) -> None:
-    titles = {
-        "CRITICAL": "Heavy traffic ahead — leave early",
-        "SERIOUS":  "Traffic building on your route",
-        "WARNING":  "Slowdown expected on your route",
-        "ADVISORY": "Light traffic on your route",
-    }
-    # Copy uses the honest delay (extra minutes vs free-flow), not the full
-    # trip duration. eta_minutes is intentionally NOT shown as "into your trip".
-    bodies = {
-        "CRITICAL": f"Heavy traffic to {dest_name} — expect about +{real_delay_min} min. "
-                    f"Leave early to stay on time. Tap to see affected roads.",
-        "SERIOUS":  f"Traffic building on your route to {dest_name} — about +{real_delay_min} min added. "
-                    f"Consider leaving a bit earlier. Tap for live conditions.",
-        "WARNING":  f"Some traffic to {dest_name} — about +{real_delay_min} min added. "
-                    f"Tap to view details.",
-        "ADVISORY": f"A minor slowdown is expected on your route to {dest_name}. "
-                    f"Roads are mostly clear.",
-    }
-    title = titles.get(level)
-    body  = bodies.get(level)
-    if not title or not body:
-        return
-
+    """Shared FCM plumbing: send to every registered token of the user."""
     tokens = _get_fcm_tokens(user_id, supabase)
     if not tokens:
         return
@@ -963,14 +1076,7 @@ async def _send_congestion_notification(
         try:
             messaging.send(messaging.Message(
                 notification=messaging.Notification(title=title, body=body),
-                data={
-                    "trip_id":     trip_id,
-                    "junction_id": junction_id,
-                    "level":       level,
-                    "jam_factor":  str(jam_factor),
-                    "eta_minutes": str(eta_minutes),
-                    "tap_action":  "show_route_details",
-                },
+                data=data,
                 android=messaging.AndroidConfig(
                     priority="high",
                     notification=messaging.AndroidNotification(
@@ -990,12 +1096,102 @@ async def _send_congestion_notification(
             ))
             sent += 1
         except Exception as e:
-            # token ميت/قديم — عادي، باقي الـ tokens هتوصل
-            logger.warning(f"Congestion send failed for one token of {user_id}: {e}")
+            # dead/stale token — fine, the live ones still receive it
+            logger.warning(f"{log_tag} send failed for one token of {user_id}: {e}")
 
-    logger.info(
-        f"Congestion → {user_id}: {level} @ {junction_id} "
-        f"(trip={trip_id}) | delivered to {sent}/{len(tokens)} token(s)"
+    logger.info(f"{log_tag} → {user_id} | delivered to {sent}/{len(tokens)} token(s)")
+
+
+def _leave_early_minutes(delay_min: int) -> int:
+    """How much earlier to suggest leaving: delay + 20% cushion, rounded up to
+    the nearest 5 (people plan in 5-minute chunks), minimum 5."""
+    return max(5, int(math.ceil(delay_min * 1.2 / 5.0) * 5))
+
+
+def _fmt_cairo_time(dt: datetime) -> str:
+    local = dt.astimezone(CAIRO_TZ)
+    return local.strftime("%I:%M %p").lstrip("0").lower()
+
+
+def _short_dest(dest_name: str, limit: int = 30) -> str:
+    d = (dest_name or "your destination").strip()
+    # keep the part before the first comma ("Mall of Egypt, Wahat Rd, …")
+    d = d.split(",")[0].strip() or d
+    return d if len(d) <= limit else d[:limit - 1].rstrip() + "…"
+
+
+def _notification_payload(trip_id: str, junction_id: str, level: str, kind: str,
+                          jam_factor: float, eta_minutes: int, delay_min: int,
+                          dest_name: str) -> Dict[str, str]:
+    return {
+        "trip_id":     trip_id,
+        "junction_id": junction_id,
+        "level":       level,
+        "kind":        kind,
+        "jam_factor":  str(jam_factor),
+        "eta_minutes": str(eta_minutes),
+        "delay_min":   str(delay_min),
+        "dest_name":   dest_name or "",
+        "tap_action":  "show_route_details",
+    }
+
+
+async def _send_trip_alert_notification(
+    user_id: str,
+    trip_id: str,
+    dest_name: str,
+    junction_id: str,
+    level: str,
+    kind: str,                       # "new" | "escalation" | "improvement"
+    jam_factor: float,
+    eta_minutes: int,
+    delay_min: int,
+    prev_delay_min: Optional[int],
+    leave_by: datetime,
+    worst_lead_min: Optional[float],
+    supabase: SupabaseClient,
+) -> None:
+    dest  = _short_dest(dest_name)
+    early = _leave_early_minutes(delay_min)
+    lead  = int(worst_lead_min) if worst_lead_min and worst_lead_min >= 3 else None
+    spot  = f" — the slow stretch hits about {lead} min into your drive" if lead else ""
+
+    if kind == "improvement":
+        if delay_min < _DELAY_FLOOR_WARNING or level in ("FREE", "ADVISORY"):
+            title = f"Road's clearing up for {dest} ✨"
+            body  = ("That earlier traffic has melted away. You're good to "
+                     "leave right on schedule — enjoy the drive.")
+        else:
+            title = f"Good news — traffic to {dest} is easing"
+            body  = (f"It's down to about {delay_min} extra minutes now"
+                     + (f" (was +{prev_delay_min})" if prev_delay_min else "")
+                     + ". Your planned time should work again.")
+    elif kind == "escalation":
+        title = f"Traffic to {dest} just got heavier"
+        body  = (f"The slowdown grew since we last checked — now about "
+                 f"{delay_min} extra minutes"
+                 + (f", up from +{prev_delay_min}" if prev_delay_min else "")
+                 + f". If you can head out {early} min early, now's the moment.")
+    elif level == "CRITICAL":
+        title = f"Heavy traffic on the way to {dest} 🚦"
+        body  = (f"It's rough out there — about {delay_min} extra minutes on "
+                 f"your route{spot}. Leave {early} min early and you'll still "
+                 f"make it comfortably.")
+    elif level == "SERIOUS":
+        title = f"Traffic is building toward {dest}"
+        body  = (f"Your route is running about {delay_min} minutes slower than "
+                 f"usual{spot}. A {early}-minute head start keeps you on time.")
+    else:  # WARNING
+        title = f"Slight slowdown on the {dest} route"
+        body  = (f"A bit of traffic{spot} — roughly {delay_min} extra minutes. "
+                 f"Nothing major, but leave a few minutes early if you're "
+                 f"cutting it close.")
+
+    await _send_fcm(
+        user_id, title, body,
+        _notification_payload(trip_id, junction_id, level, kind,
+                              jam_factor, eta_minutes, delay_min, dest_name),
+        supabase, log_tag=f"Alert[{kind}/{level}] trip={trip_id}",
     )
 
 
@@ -1007,49 +1203,43 @@ async def _send_all_clear_notification(
     leave_by: datetime,
     supabase: SupabaseClient,
 ) -> None:
-    title = "All clear — you're good to go"
-    body  = (f"No significant traffic detected on your route to {dest_name}. "
-             f"Leave as planned and have a safe trip!")
+    dest = _short_dest(dest_name)
+    t    = _fmt_cairo_time(leave_by)
+    title = f"You're all set for {dest} ✨"
+    body  = (f"Just gave your route a final check — all clear. Leave at {t} "
+             f"as planned and enjoy a smooth drive.")
 
-    tokens = _get_fcm_tokens(user_id, supabase)
-    if not tokens:
-        return
+    await _send_fcm(
+        user_id, title, body,
+        _notification_payload(trip_id, junction_id, "ALL_CLEAR", "all_clear",
+                              0.0, 0, 0, dest_name),
+        supabase, log_tag=f"AllClear trip={trip_id}",
+    )
 
-    from firebase_admin import messaging
-    sent = 0
-    for token in tokens:
-        try:
-            messaging.send(messaging.Message(
-                notification=messaging.Notification(title=title, body=body),
-                data={
-                    "trip_id":     trip_id,
-                    "junction_id": junction_id,
-                    "level":       "ALL_CLEAR",
-                    "eta_minutes": "0",
-                    "tap_action":  "show_route_details",
-                },
-                android=messaging.AndroidConfig(
-                    priority="high",
-                    notification=messaging.AndroidNotification(
-                        channel_id="routemind_trips",
-                        click_action="FLUTTER_NOTIFICATION_CLICK",
-                    ),
-                ),
-                apns=messaging.APNSConfig(
-                    payload=messaging.APNSPayload(
-                        aps=messaging.Aps(
-                            alert=messaging.ApsAlert(title=title, body=body),
-                            sound="default",
-                        ),
-                    ),
-                ),
-                token=token,
-            ))
-            sent += 1
-        except Exception as e:
-            logger.warning(f"ALL_CLEAR send failed for one token of {user_id}: {e}")
 
-    logger.info(f"ALL_CLEAR → {user_id} (trip={trip_id}) | delivered to {sent}/{len(tokens)} token(s)")
+async def _send_departure_reminder_notification(
+    user_id: str,
+    trip_id: str,
+    dest_name: str,
+    junction_id: str,
+    level: str,
+    delay_min: int,
+    leave_by: datetime,
+    supabase: SupabaseClient,
+) -> None:
+    dest = _short_dest(dest_name)
+    t    = _fmt_cairo_time(leave_by)
+    title = f"Leaving soon? {dest} still has traffic"
+    body  = (f"You planned to head out at {t} — the route is still carrying "
+             f"about {delay_min} extra minutes. Leaving right now beats "
+             f"waiting it out.")
+
+    await _send_fcm(
+        user_id, title, body,
+        _notification_payload(trip_id, junction_id, level, "reminder",
+                              0.0, 0, delay_min, dest_name),
+        supabase, log_tag=f"Reminder[{level}] trip={trip_id}",
+    )
 
 
 # ─────────────────────────────────────────────────────────────────

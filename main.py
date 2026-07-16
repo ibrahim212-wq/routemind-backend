@@ -211,7 +211,7 @@ async def demo_scan_now():
     from services.supabase_client import get_supabase
     from services.google_traffic import get_google_route_congestion
     from services.scanner import (
-        scan_trip, _send_congestion_notification, _jam_to_level, _haversine_km,
+        scan_trip, _send_trip_alert_notification, _jam_to_level, _haversine_km,
     )
     from model.loader import ModelLoader
 
@@ -295,9 +295,9 @@ async def demo_scan_now():
     real_delay_min = max(0, round((live_sec - base_dur) / 60))
     eta_minutes    = int(live_sec / 60)
     rep_junction   = jids[0] if jids else "demo"
-    # FREE has no notification template; for the demo fall back to ADVISORY so every
-    # device still receives a "tap to view" — the alert screen shows the real data.
-    notif_level = level if level in ("CRITICAL", "SERIOUS", "WARNING", "ADVISORY") else "ADVISORY"
+    # For the demo, always broadcast at least a WARNING-styled card so every
+    # device receives a "tap to view" — the alert screen shows the real data.
+    notif_level = level if level in ("CRITICAL", "SERIOUS", "WARNING") else "WARNING"
 
     # ── e. broadcast the EXISTING notification to ALL devices (one call per user) ──
     tok_rows = supabase.table("fcm_tokens").select("user_id").limit(500).execute().data or []
@@ -305,10 +305,12 @@ async def demo_scan_now():
     notified = 0
     for uid in user_ids:
         try:
-            await _send_congestion_notification(
+            await _send_trip_alert_notification(
                 user_id=uid, trip_id=trip_id, dest_name=trip_row["dest_name"],
-                junction_id=rep_junction, level=notif_level, jam_factor=predicted_jam,
-                eta_minutes=eta_minutes, real_delay_min=real_delay_min, supabase=supabase)
+                junction_id=rep_junction, level=notif_level, kind="new",
+                jam_factor=predicted_jam, eta_minutes=eta_minutes,
+                delay_min=real_delay_min, prev_delay_min=None,
+                leave_by=now, worst_lead_min=None, supabase=supabase)
             notified += 1
         except Exception as e:
             logger.warning(f"demo broadcast failed for user {uid}: {e}")

@@ -318,27 +318,53 @@ async def stream_google_plan(
 # Route-level live/predicted congestion (for the intelligent scanner)
 # ─────────────────────────────────────────────────────────────────
 
+# True-free-flow baseline cache. Free flow is time-invariant on the scale of a
+# day, so one Routes call per route per 12h is enough (scans repeat every 10min).
+# Key: rounded endpoints + waypoint count. Value: (free_seconds, fetched_ts).
+_FREE_FLOW_TTL = 12 * 3600
+_free_flow_cache: dict = {}
+
+
+def _next_night_utc() -> datetime:
+    """Next 3:30 AM Cairo, as UTC — Google's predicted duration then is true
+    free flow for the route (same source & units as the live call)."""
+    now_cairo = datetime.utcnow() + timedelta(hours=CAIRO_UTC_OFFSET)
+    night = now_cairo.replace(hour=3, minute=30, second=0, microsecond=0)
+    if night <= now_cairo:
+        night += timedelta(days=1)
+    return (night - timedelta(hours=CAIRO_UTC_OFFSET)).replace(tzinfo=timezone.utc)
+
+
 async def get_google_route_congestion(
     origin_lat: float, origin_lng: float,
     dest_lat:   float, dest_lng:   float,
     free_flow_seconds: float | None = None,
     departure_utc: datetime | None = None,
+    waypoints: list[dict] | None = None,
 ) -> dict | None:
     """
-    Route-level congestion from the SAME Google Routes source + jam formula the
-    plan-drive slots use (api/plan_drive_stream._jam_adaptive), so scanner alerts
-    and the on-screen slots agree:
+    Route-level congestion for the intelligent scanner.
 
-        jam = clamp((live_duration / free_flow_duration - 1) / 0.50, 0, 1)
+        jam = clamp((live / free_flow - 1) / 0.50, 0, 1)     (slot-aligned)
 
-    - departure_utc: when the user leaves (UTC-aware). Google rejects past
-      times, so we clamp to now+2min and otherwise pass it through to get
-      PREDICTED traffic at the departure time (same as a slot for that time).
-    - free_flow_seconds: the trip's stored Mapbox free-flow duration. If absent,
-      we fetch Google's TRAFFIC_UNAWARE duration as the baseline.
+    Two hard-won calibration facts (measured Cairo, Thursday rush 2026-07-16):
 
-    Returns {live_seconds, free_flow_seconds, congestion_ratio, jam_factor}
-    with jam_factor on the 0..1 slot scale, or None on failure.
+    1. BASELINE — Google's TRAFFIC_UNAWARE duration is a *typical-traffic*
+       duration, not free flow. In Cairo "typical" already includes heavy
+       traffic, so live/unaware compressed every rush hour to ratio≈1.0-1.3 and
+       the scanner under-reported delays (+8 min shown when the true delay vs
+       free flow was +15-20). The baseline is now Google's PREDICTED duration at
+       the next 3:30 AM Cairo — true free flow from the same source — cached per
+       route for 12h. TRAFFIC_UNAWARE and the caller's stored duration remain
+       fallbacks only.
+
+    2. ROUTE PINNING — with origin/dest only, TRAFFIC_AWARE_OPTIMAL happily
+       routes AROUND the congestion the user will actually sit in. `waypoints`
+       (sampled from the trip's stored route_polyline) pin both the live and the
+       baseline request to the user's planned corridor.
+
+    Returns {live_seconds, free_flow_seconds, congestion_ratio, jam_factor,
+             delay_seconds, baseline_source} or None on failure.
     """
     now = datetime.now(timezone.utc)
     if departure_utc is None or departure_utc <= now + timedelta(minutes=2):
@@ -346,20 +372,41 @@ async def get_google_route_congestion(
     dep_iso = (departure_utc.astimezone(timezone.utc)
                .replace(microsecond=0).isoformat().replace("+00:00", "Z"))
 
-    def _body(aware: bool) -> dict:
+    # Callers pass intermediate points only (no origin/dest), so sample inline —
+    # _sample_waypoints would strip the first/last as endpoints and lose two.
+    sampled: list[dict] = []
+    if waypoints:
+        if len(waypoints) <= 8:
+            sampled = list(waypoints)
+        else:
+            step = len(waypoints) / 8.0
+            sampled = [waypoints[int(i * step)] for i in range(8)]
+
+    def _body(pref: str, dep: str | None) -> dict:
         b = {
             "origin":      {"location": {"latLng": {"latitude": origin_lat, "longitude": origin_lng}}},
             "destination": {"location": {"latLng": {"latitude": dest_lat,   "longitude": dest_lng}}},
             "travelMode":  "DRIVE",
-            "routingPreference": "TRAFFIC_AWARE_OPTIMAL" if aware else "TRAFFIC_UNAWARE",
+            "routingPreference": pref,
         }
-        if aware:
-            b["departureTime"] = dep_iso
+        if sampled:
+            b["intermediates"] = [
+                {"via": True,
+                 "location": {"latLng": {"latitude": wp["lat"], "longitude": wp["lng"]}}}
+                for wp in sampled
+            ]
+        if dep:
+            b["departureTime"] = dep
         return b
 
+    cache_key = (round(origin_lat, 4), round(origin_lng, 4),
+                 round(dest_lat, 4),   round(dest_lng, 4), len(sampled))
+
     try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            live_resp = await client.post(ROUTES_URL, json=_body(True), headers=_make_headers())
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            live_resp = await client.post(
+                ROUTES_URL, json=_body("TRAFFIC_AWARE_OPTIMAL", dep_iso),
+                headers=_make_headers())
             if live_resp.status_code != 200:
                 logger.warning(f"Google congestion: live {live_resp.status_code} {live_resp.text[:120]}")
                 return None
@@ -368,14 +415,35 @@ async def get_google_route_congestion(
                 logger.warning("Google congestion: no live route returned")
                 return None
 
-            # Free-flow baseline ALWAYS = Google's own TRAFFIC_UNAWARE duration, NOT
-            # the stored base_duration_seconds (often inflated by congestion at trip
-            # creation, which made ratio<1 → jam=0 → alerts never fired). The passed
-            # free_flow_seconds is only a last-resort fallback if this call fails.
-            free_resp = await client.post(ROUTES_URL, json=_body(False), headers=_make_headers())
-            free = _parse_duration(free_resp.json()) if free_resp.status_code == 200 else None
+            # ── True free-flow baseline (cached) ──
+            free = None
+            baseline_source = "night_predicted"
+            import time as _time
+            hit = _free_flow_cache.get(cache_key)
+            if hit and (_time.time() - hit[1]) < _FREE_FLOW_TTL:
+                free = hit[0]
+                baseline_source = "night_predicted_cached"
+            else:
+                night_iso = (_next_night_utc().replace(microsecond=0)
+                             .isoformat().replace("+00:00", "Z"))
+                night_resp = await client.post(
+                    ROUTES_URL, json=_body("TRAFFIC_AWARE", night_iso),
+                    headers=_make_headers())
+                if night_resp.status_code == 200:
+                    free = _parse_duration(night_resp.json())
+                if free:
+                    _free_flow_cache[cache_key] = (free, _time.time())
+
+            if not free:
+                unaware_resp = await client.post(
+                    ROUTES_URL, json=_body("TRAFFIC_UNAWARE", None),
+                    headers=_make_headers())
+                free = (_parse_duration(unaware_resp.json())
+                        if unaware_resp.status_code == 200 else None)
+                baseline_source = "traffic_unaware"
             if free is None and free_flow_seconds and free_flow_seconds > 0:
                 free = int(free_flow_seconds)
+                baseline_source = "stored_fallback"
     except Exception as e:
         logger.error(f"Google congestion error: {e}")
         return None
@@ -384,12 +452,20 @@ async def get_google_route_congestion(
         logger.warning("Google congestion: no free-flow baseline")
         return None
 
-    ratio = live / free
+    # A predicted night duration can very occasionally exceed a quiet live one
+    # (route variants); never report negative congestion.
+    ratio = max(1.0, live / free)
     jam   = max(0.0, min(1.0, (ratio - 1.0) / 0.50))
-    logger.info(f"Google congestion: live={live}s free={free}s ratio={ratio:.2f} jam={jam:.2f}")
+    delay = max(0, live - free)
+    logger.info(
+        f"Google congestion: live={live}s free={free}s ({baseline_source}) "
+        f"ratio={ratio:.2f} jam={jam:.2f} delay={delay//60}min via={len(sampled)}wp"
+    )
     return {
         "live_seconds":      live,
         "free_flow_seconds": free,
         "congestion_ratio":  round(ratio, 3),
         "jam_factor":        round(jam, 3),   # 0..1, same scale as plan-drive slots
+        "delay_seconds":     delay,
+        "baseline_source":   baseline_source,
     }

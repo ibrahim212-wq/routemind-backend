@@ -220,17 +220,20 @@ async def _predict_jam10(jid, arrival_dt, lead_minutes, *, lat, lng,
 
 def _distribute_delay(spots: list, total_delay: int) -> None:
     """
-    Distribute the REAL Google delay across hotspots so the per-spot bubbles
-    SUM EXACTLY to total_delay. Weight = jam01 for hotspots (level ≥ WARNING),
-    else 0. Integer-rounded with the remainder pushed to the largest weight.
-    Reconciliation: if there is real delay but no pattern hotspot, attribute it
+    Distribute the REAL Google delay across the WORST 3 hotspots so the
+    per-spot bubbles SUM EXACTLY to total_delay (chips stay meaningful:
+    "+6 min" on the worst stretch, not "+2 min" scattered everywhere).
+    Integer-rounded with the remainder pushed to the largest weight.
+    Reconciliation: if there is real delay but no hotspot, attribute it
     to the busiest on-route junction (never drop the delay, never fabricate).
     """
     for s in spots:
         s["delay_min"] = 0
     if total_delay <= 0:
         return
-    weighted = [(s, s["jam_factor"] / 10.0) for s in spots if s["level"] in _WARN_LEVELS]
+    hot = sorted((s for s in spots if s["level"] in _WARN_LEVELS),
+                 key=lambda s: s["jam_factor"], reverse=True)[:3]
+    weighted = [(s, s["jam_factor"] / 10.0) for s in hot]
     wsum = sum(w for _, w in weighted)
     if wsum <= 0:
         if spots:                                   # real delay, no hotspot → busiest spot
@@ -584,13 +587,14 @@ async def get_trip_alert(trip_id: str):
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    # ── 2. Latest scan alerts ─────────────────────────────────────
+    # ── 2. Latest scan rows (any scan, not only alert_sent — a quiet trip's
+    #      most recent scan still carries the honest delay for the headline) ──
     try:
         scans_res = (
             supabase.table("scan_results")
             .select("*")
             .eq("trip_id", trip_id)
-            .eq("alert_sent", True)
+            .eq("prediction_source", "google_routes")
             .order("scanned_at", desc=True)
             .limit(10)
             .execute()
@@ -599,11 +603,24 @@ async def get_trip_alert(trip_id: str):
         logger.warning(f"Scans query failed for {trip_id}: {e}")
         scans_res = type("R", (), {"data": []})()
 
-    # ── 3. Headline delay (magnitude anchor — Google live−free, unchanged) ──
+    # ── 3. Headline delay (magnitude anchor). The scanner now stores its honest
+    #      delay (live − TRUE free-flow) in the rep row's jsonb; read it
+    #      directly. The old fallback compared live against the trip's stored
+    #      base_duration_seconds — an already-buffered slot duration, which is
+    #      why the screen showed "no delay" for visibly congested routes. ──
     scans    = scans_res.data or []
     base_dur = float(trip.get("base_duration_seconds") or 0)
     live_sec = float(scans[0].get("user_eta_seconds") or 0) if scans else 0.0
-    expected_delay_min = max(0, round((live_sec - base_dur) / 60)) if (scans and base_dur > 0) else 0
+
+    expected_delay_min = 0
+    if scans:
+        uj = scans[0].get("upstream_junctions")
+        if isinstance(uj, dict) and uj.get("delay_min") is not None:
+            expected_delay_min = max(0, int(uj["delay_min"]))
+        elif isinstance(uj, dict) and uj.get("free_flow_seconds"):
+            expected_delay_min = max(0, round((live_sec - float(uj["free_flow_seconds"])) / 60))
+        elif base_dur > 0:
+            expected_delay_min = max(0, round((live_sec - base_dur) / 60))
     route_seconds = live_sec if live_sec > 0 else base_dur
 
     # ── 4. Phase 3 preferred: per-junction rows from the latest intelligent scan.
@@ -625,9 +642,16 @@ async def get_trip_alert(trip_id: str):
         f"tomtom_calls={coverage.get('tomtom_calls', 0)} | sources={coverage.get('source_breakdown')}"
     )
 
+    # Suggest leaving early: the delay plus a 20% cushion, in 5-min steps —
+    # same rule the notification copy uses, so screen and push always agree.
+    import math as _math
+    recommended_early = (max(5, int(_math.ceil(expected_delay_min * 1.2 / 5.0) * 5))
+                         if expected_delay_min > 0 else 0)
+
     return {
-        "trip":               trip,
-        "alert_junctions":    alert_junctions,
-        "expected_delay_min": expected_delay_min,
-        "coverage":           coverage,
+        "trip":                      trip,
+        "alert_junctions":           alert_junctions,
+        "expected_delay_min":        expected_delay_min,
+        "recommended_early_minutes": recommended_early,
+        "coverage":                  coverage,
     }
