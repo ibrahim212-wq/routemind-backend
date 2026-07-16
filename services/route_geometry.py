@@ -103,6 +103,29 @@ def decode_polyline6(encoded: str) -> List[LatLng]:
     return coords
 
 
+def encode_polyline5(coords: List[LatLng]) -> str:
+    """Encode [(lat,lng)] to a precision-5 polyline — the format Google's
+    Routes/Places searchAlongRouteParameters expects. Inverse of the standard
+    Google algorithm; precision 5 (factor 1e5), not the app's route precision 6."""
+    out = []
+    prev_lat = prev_lng = 0
+
+    def _enc(delta: int):
+        v = ~(delta << 1) if delta < 0 else (delta << 1)
+        while v >= 0x20:
+            out.append(chr((0x20 | (v & 0x1f)) + 63))
+            v >>= 5
+        out.append(chr(v + 63))
+
+    for lat, lng in coords:
+        ilat = int(round(lat * 1e5))
+        ilng = int(round(lng * 1e5))
+        _enc(ilat - prev_lat)
+        _enc(ilng - prev_lng)
+        prev_lat, prev_lng = ilat, ilng
+    return "".join(out)
+
+
 def geojson_to_latlng(coords: List[List[float]]) -> List[LatLng]:
     """GeoJSON [[lng, lat], ...] → [(lat, lng), ...], dropping malformed points."""
     out: List[LatLng] = []

@@ -308,6 +308,7 @@ async def resolve_nearby(
     *,
     category: Optional[str] = None,
     query: Optional[str] = None,
+    included_type: Optional[str] = None,
     limit: int = 1,
 ) -> List[PlaceResult]:
     """
@@ -315,6 +316,10 @@ async def resolve_nearby(
     nearest first) or free-text (searchText, biased to the user). Returns a
     distance-sorted list (≤ limit). NEVER raises and NEVER returns/logs the key —
     on any failure (no key, bad category, HTTP error, timeout) returns [].
+
+    included_type (free-text mode only) constrains the text search to one
+    Google place type — e.g. query "Master" + included_type "gas_station"
+    matches only fuel stations, not any shop whose name contains the word.
     """
     if not GOOGLE_KEY:
         logger.error("GOOGLE_MAPS_API_KEY env var is not set")
@@ -330,6 +335,8 @@ async def resolve_nearby(
                 "circle": {"center": {"latitude": lat, "longitude": lng}, "radius": DEFAULT_RADIUS_M}
             },
         }
+        if included_type:
+            payload["includedType"] = included_type
         url = PLACES_TEXT_URL
     else:
         gtype = _CATEGORY_TO_TYPE.get((category or "").lower())
@@ -350,6 +357,133 @@ async def resolve_nearby(
     if not data:
         return []
     return _parse_places(data, lat, lng)[:n]
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Enriched retrieval (the copilot's recommendation layer)
+#
+#  COST NOTE (approved): the search mask below adds rating/userRatingCount/
+#  priceLevel/currentOpeningHours/primaryType → Google's ENTERPRISE SKU
+#  ($35 / 1000, vs the $32 Pro the lean mask already bills). reviews +
+#  editorialSummary are ENTERPRISE+ATMOSPHERE ($40) and are fetched ONLY in
+#  place_details_rich() for a single drilled-into place — never on list search.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Enterprise-tier search mask: identity + quality signals for ranking/compare.
+PLACES_RICH_MASK = (
+    "places.id,places.displayName,places.location,places.formattedAddress,"
+    "places.primaryType,places.rating,places.userRatingCount,places.priceLevel,"
+    "places.currentOpeningHours.openNow,places.businessStatus"
+)
+# Atmosphere-tier details mask (single place, on demand): + reviews + editorial.
+PLACE_DETAILS_RICH_MASK = (
+    "id,displayName,location,formattedAddress,primaryType,rating,userRatingCount,"
+    "priceLevel,currentOpeningHours,regularOpeningHours.weekdayDescriptions,"
+    "internationalPhoneNumber,editorialSummary,reviews"
+)
+_PRICE_WORD = {"PRICE_LEVEL_FREE": "free", "PRICE_LEVEL_INEXPENSIVE": "cheap",
+               "PRICE_LEVEL_MODERATE": "moderate", "PRICE_LEVEL_EXPENSIVE": "pricey",
+               "PRICE_LEVEL_VERY_EXPENSIVE": "very pricey"}
+
+
+def _rich_place(p: dict, origin: Optional[tuple] = None) -> Optional[dict]:
+    """Normalize one Places (New) result into the copilot's enriched shape.
+    origin=(lat,lng) attaches straight-line distance_m when given."""
+    loc = p.get("location") or {}
+    lat, lng = loc.get("latitude"), loc.get("longitude")
+    if lat is None or lng is None:
+        return None
+    name = _fix_mojibake(((p.get("displayName") or {}).get("text") or "").strip())
+    if not name:
+        return None
+    out = {
+        "id": p.get("id"),
+        "name": name,
+        "lat": float(lat), "lng": float(lng),
+        "address": _fix_mojibake(p.get("formattedAddress") or None),
+        "primary_type": p.get("primaryType"),
+        "rating": p.get("rating"),
+        "reviews": p.get("userRatingCount"),
+        "price": _PRICE_WORD.get(p.get("priceLevel") or ""),
+        "open_now": (p.get("currentOpeningHours") or {}).get("openNow"),
+    }
+    if origin and lat is not None:
+        out["distance_m"] = int(round(_haversine_m(origin[0], origin[1], float(lat), float(lng))))
+    return out
+
+
+async def search_places(
+    *,
+    lat: float,
+    lng: float,
+    query: str,
+    included_type: Optional[str] = None,
+    open_now: bool = False,
+    min_rating: Optional[float] = None,
+    rank: str = "relevance",              # relevance | distance
+    radius_m: float = DEFAULT_RADIUS_M,
+    route_polyline: Optional[str] = None,  # encoded polyline5 → search-along-route
+    limit: int = 5,
+) -> List[dict]:
+    """
+    Enriched Text Search (New). Free-text semantic query + circle bias around
+    (lat,lng) — or, when route_polyline is given, Google's native
+    searchAlongRouteParameters (one call, corridor-aware). Returns enriched
+    dicts (rating/reviews/price/open_now/primary_type). NEVER raises → [].
+    """
+    if not GOOGLE_KEY or not query.strip():
+        return []
+    n = max(1, min(20, limit))
+    payload: dict = {"textQuery": query.strip(), "pageSize": n,
+                     "rankPreference": "DISTANCE" if rank == "distance" else "RELEVANCE"}
+    if included_type:
+        payload["includedType"] = included_type
+    if open_now:
+        payload["openNow"] = True
+    if min_rating:
+        payload["minRating"] = float(min_rating)
+    if route_polyline:
+        # Bias to the route corridor; Google ranks by relevance along the path.
+        payload["searchAlongRouteParameters"] = {"polyline": {"encodedPolyline": route_polyline}}
+        payload["locationBias"] = {"circle": {"center": {"latitude": lat, "longitude": lng},
+                                              "radius": min(radius_m, 50000.0)}}
+    else:
+        payload["locationBias"] = {"circle": {"center": {"latitude": lat, "longitude": lng},
+                                              "radius": min(radius_m, 50000.0)}}
+    data = await _google_post(PLACES_TEXT_URL, payload, PLACES_RICH_MASK,
+                              debug_label=f"search_places {query!r}")
+    if not data:
+        return []
+    out = [_rich_place(p, origin=(lat, lng)) for p in (data.get("places") or [])]
+    return [p for p in out if p][:n]
+
+
+async def place_details_rich(place_id: str) -> Optional[dict]:
+    """Single-place deep fetch (Atmosphere SKU): reviews + hours + editorial.
+    On-demand only. None on failure."""
+    if not place_id:
+        return None
+    data = await _google_get(PLACES_DETAILS_URL + place_id, PLACE_DETAILS_RICH_MASK)
+    if not data:
+        return None
+    base = _rich_place(data) or {}
+    ed = (data.get("editorialSummary") or {}).get("text")
+    # 3 × 280 chars: enough for one telling quote; a 5×500 payload measurably
+    # slowed the model's spoken reply (reviews-latency defect).
+    reviews = []
+    for r in (data.get("reviews") or [])[:3]:
+        txt = _fix_mojibake(((r.get("text") or {}).get("text") or "").strip())
+        if txt:
+            reviews.append({"rating": r.get("rating"),
+                            "when": r.get("relativePublishTimeDescription"),
+                            "text": txt[:280]})
+    hours = (data.get("regularOpeningHours") or {}).get("weekdayDescriptions")
+    base.update({
+        "editorial": _fix_mojibake(ed) if ed else None,
+        "phone": data.get("internationalPhoneNumber"),
+        "hours": hours,
+        "review_samples": reviews,
+    })
+    return base
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 

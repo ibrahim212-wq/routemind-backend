@@ -1,6 +1,11 @@
 """
 api/assistant.py
 
+⚠️ LEGACY (v1) — no current app build calls these endpoints. The LIVE assistant
+is api/copilot.py (/api/copilot/converse): clients do on-device STT + Google
+Cloud TTS and stream the brain from there. Kept only for old installed builds;
+make behavior changes in copilot.py.
+
 AI assistant endpoints (all OpenAI calls are server-side, direct httpx — no SDK):
   POST /api/assistant/chat   — text in  → text reply        (phase 1, unchanged)
   POST /api/assistant/voice  — audio in → transcript + reply text + reply audio
