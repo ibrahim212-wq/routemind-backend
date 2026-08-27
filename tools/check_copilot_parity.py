@@ -20,6 +20,7 @@ Exit 0 = parity holds. This is the no-compiler guard for the client catalogs.
 """
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -88,19 +89,27 @@ def check_values(name, entries, errors):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--app-root", default=None,
-                    help="path to the cairoWay app repo root")
+                    help="path to the cairoWay app repo root "
+                         "(or set ROUTEMIND_APP_ROOT)")
     args = ap.parse_args()
 
     backend_root = Path(__file__).resolve().parent.parent
-    app_root = Path(args.app_root) if args.app_root else None
+    # Resolution order, machine-independent: --app-root > $ROUTEMIND_APP_ROOT >
+    # the usual sibling/parent checkouts relative to THIS repo.
+    app_root = None
+    for cand in (args.app_root, os.environ.get("ROUTEMIND_APP_ROOT")):
+        if cand:
+            app_root = Path(cand)
+            break
     if app_root is None:
-        for cand in (Path("G:/grad_all/maps-mobile-application/cairoWay"),
-                     backend_root.parent / "cairoWay"):
+        for cand in (backend_root.parent / "cairoWay",
+                     backend_root.parent / "maps-mobile-application" / "cairoWay",
+                     backend_root.parent.parent / "maps-mobile-application" / "cairoWay"):
             if cand.exists():
                 app_root = cand
                 break
     if app_root is None or not app_root.exists():
-        print("app repo not found — pass --app-root")
+        print("app repo not found — pass --app-root or set ROUTEMIND_APP_ROOT")
         return 2
 
     kt = parse_kotlin(app_root / "android/app/src/main/java/com/routemind/app/nav/CopilotStrings.kt")
