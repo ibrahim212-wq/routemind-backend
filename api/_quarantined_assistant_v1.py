@@ -1,10 +1,11 @@
 """
-api/assistant.py
+api/_quarantined_assistant_v1.py  (was api/assistant.py)
 
-⚠️ LEGACY (v1) — no current app build calls these endpoints. The LIVE assistant
-is api/copilot.py (/api/copilot/converse): clients do on-device STT + Google
-Cloud TTS and stream the brain from there. Kept only for old installed builds;
-make behavior changes in copilot.py.
+☠️ QUARANTINED DEAD CODE — NOT ROUTED. main.py no longer includes this router
+(removed in the CopilotV2 overhaul), so /api/assistant/* returns 404. The LIVE
+assistant is api/copilot.py → /api/copilot/converse (+ api/copilot_v2.py).
+This file is retained only as a historical reference for the v1 pipeline shape;
+do not import it, do not "fix" it, do not resurrect it.
 
 AI assistant endpoints (all OpenAI calls are server-side, direct httpx — no SDK):
   POST /api/assistant/chat   — text in  → text reply        (phase 1, unchanged)
