@@ -1347,9 +1347,12 @@ async def _execute_tool(name: str, args: Dict[str, Any],
         return {"error": "tool failed"}, None
 
 # ── OpenAI streaming ──────────────────────────────────────────────────────────
-async def _stream_chat(messages: List[Dict], with_tools: bool):
+async def _stream_chat(messages: List[Dict], with_tools: bool,
+                       tools: Optional[List[Dict]] = None):
     """Yield ('delta', text) and finally ('tool_calls', [...]) or ('end', None).
-    Raises on transport errors; caller converts to an error line."""
+    Raises on transport errors; caller converts to an error line.
+    `tools` overrides the schema list (CopilotV2 passes its extended set);
+    None keeps the legacy _TOOLS — the legacy path is byte-identical."""
     payload: Dict[str, Any] = {
         "model": COPILOT_MODEL, "messages": messages, "stream": True,
     }
@@ -1361,7 +1364,7 @@ async def _stream_chat(messages: List[Dict], with_tools: bool):
         payload["max_tokens"] = MAX_TOKENS
         payload["temperature"] = COPILOT_TEMP
     if with_tools:
-        payload["tools"] = _TOOLS
+        payload["tools"] = tools if tools is not None else _TOOLS
         payload["tool_choice"] = "auto"
     headers = {"Authorization": f"Bearer {OPENAI_KEY}",
                "Content-Type": "application/json"}
@@ -1405,12 +1408,26 @@ class ConverseRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
     app_lang: str = "en"
     pending_action: Optional[Dict[str, Any]] = None
+    # ── CopilotV2 (feature flag) ──
+    # v2=True routes the turn through api/copilot_v2.py (single language
+    # resolution + deterministic output validator + fact fast-path + the
+    # extended tool set). Absent/false = this file's legacy path, unchanged —
+    # that is the kill-switch.
+    v2: bool = False
+    prev_lang: Optional[str] = None   # sticky conversation language from client
 
 
 @router.post("/copilot/converse")
 async def copilot_converse(req: ConverseRequest):
     """Streaming copilot turn. Always returns 200 + NDJSON; failures arrive as
     an in-stream error line so the client can speak a graceful fallback."""
+
+    if req.v2:
+        from api.copilot_v2 import stream_v2   # lazy: avoids an import cycle
+        return StreamingResponse(stream_v2(req),
+                                 media_type="application/x-ndjson",
+                                 headers={"Cache-Control": "no-cache",
+                                          "X-Accel-Buffering": "no"})
 
     async def gen() -> AsyncGenerator[str, None]:
         def line(obj: Dict) -> str:
