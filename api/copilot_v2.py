@@ -1054,6 +1054,24 @@ _CORRECTIVE = ("YOUR PREVIOUS DRAFT WAS IN THE WRONG LANGUAGE AND WAS "
                "DISCARDED. Rewrite the reply ENTIRELY in the pinned language. "
                "This is a hard constraint — every sentence.")
 
+# ── Say-it-once guard ─────────────────────────────────────────────────────────
+# A model pass can emit BOTH content and a tool call ("here's the traffic…"
+# + traffic_check). We speak that content immediately (good for latency), the
+# tool runs, and the follow-up pass then answers the SAME question — often
+# word-for-word. The driver hears the whole reply twice. Observed in
+# production on 2026-08-27 with an action-less tool (traffic_check), and
+# structurally possible for every tool (the legacy generator has the same
+# shape). Fix: a per-turn set of already-spoken sentences; a repeat is
+# dropped before it reaches the client. Short lines ("تمام.", "Okay.") are
+# exempt so genuine brief acks still get through.
+_DEDUP_MIN_CHARS = 12
+_PUNCT = ".!?؟…\n \t،,;:()[]{}\"'«»—–-٫٬"
+
+
+def _norm_sentence(s: str) -> str:
+    """Comparison key: case-folded, punctuation- and space-insensitive."""
+    return "".join(c for c in s.lower() if c not in _PUNCT)
+
 
 # ── The v2 turn generator ─────────────────────────────────────────────────────
 async def stream_v2(req) -> AsyncGenerator[str, None]:
@@ -1114,6 +1132,19 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
     confirm_used = False
     expects_confirm = False
     emitted_text: List[str] = []
+    spoken_norm: set = set()          # say-it-once guard (see _norm_sentence)
+
+    def already_said(sentence: str) -> bool:
+        """True when this sentence was already spoken THIS turn (and is long
+        enough to be worth suppressing) — the pre-tool/post-tool repeat."""
+        key = _norm_sentence(sentence)
+        if len(key) < _DEDUP_MIN_CHARS:
+            return False
+        if key in spoken_norm:
+            logger.info("copilot v2 dedup: dropped a repeated sentence")
+            return True
+        spoken_norm.add(key)
+        return False
 
     async def run_pass(with_tools: bool) -> _GateResult:
         """gated pass + regenerate-once + translate fallback. Failing text
@@ -1150,15 +1181,18 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                     return_when=asyncio.FIRST_COMPLETED)
                 if get_task in done:
                     s = get_task.result()
-                    spoke = True
-                    emitted_text.append(s)
-                    yield line({"t": "delta", "text": s + " "})
+                    if not already_said(s):
+                        spoke = True
+                        emitted_text.append(s)
+                        yield line({"t": "delta", "text": s + " "})
                     continue
                 get_task.cancel()
                 break
             result = pass_task.result()
             while not out_q.empty():
                 s = out_q.get_nowait()
+                if already_said(s):
+                    continue
                 spoke = True
                 emitted_text.append(s)
                 yield line({"t": "delta", "text": s + " "})

@@ -280,6 +280,50 @@ def test_switch_route_fastest_honest_when_already_best(monkeypatch):
     assert payload.get("already_fastest") is True
 
 
+def test_say_it_once_preamble_then_identical_followup(monkeypatch):
+    """PRODUCTION DEFECT 2026-08-27: a pass can emit a full answer AND a tool
+    call; the post-tool pass then repeats it verbatim and the driver hears the
+    whole reply twice. The dedup guard must emit it exactly once."""
+    answer = "قدامك زحمة تقيلة بعد حوالي ٢ كيلو على صلاح سالم، وهتأخرك ٦ دقايق. "
+    req = FakeReq("الطريق قدامي عامل ايه؟", ctx={"user_lat": 30.0,
+                                                 "user_lng": 31.2,
+                                                 "route": [[31.2, 30.0],
+                                                           [31.3, 30.1]]})
+    script = [
+        # pass 1: speaks the whole answer AND calls an action-less tool
+        [("delta", answer),
+         ("tool_calls", [{"id": "c1", "name": "traffic_check", "args": "{}"}])],
+        # pass 2: the follow-up says exactly the same thing
+        [("delta", answer)],
+    ]
+
+    async def fake_check(ctx):
+        return {"available": False, "note": "no coverage"}
+    monkeypatch.setattr(v2, "_traffic_check", fake_check)
+
+    lines, _ = asyncio.run(run_turn(req, script, monkeypatch))
+    text = deltas(lines)
+    assert text.count("صلاح سالم") == 1, f"answer spoken twice: {text!r}"
+    assert "زحمة تقيلة" in text
+
+
+def test_dedup_allows_genuine_short_acks(monkeypatch):
+    """Short lines are exempt — two 'تمام.'s in one turn are legitimate."""
+    req = FakeReq("تمام")
+    script = [[("delta", "تمام. "), ("delta", "تمام. ")]]
+    lines, _ = asyncio.run(run_turn(req, script, monkeypatch))
+    assert deltas(lines).count("تمام") == 2
+
+
+def test_dedup_does_not_suppress_distinct_sentences(monkeypatch):
+    req = FakeReq("احكيلي عن الطريق")
+    script = [[("delta", "الطريق قدامك فاضي تمامًا دلوقتي. "),
+               ("delta", "بس فيه رادار بعد كيلومترين خد بالك منه. ")]]
+    lines, _ = asyncio.run(run_turn(req, script, monkeypatch))
+    text = deltas(lines)
+    assert "فاضي" in text and "رادار" in text
+
+
 def test_empty_generation_falls_back_localized(monkeypatch):
     req = FakeReq("تمام")
     script = [[("end", None)]]
