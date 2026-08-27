@@ -345,6 +345,25 @@ def test_context_gps_stale_flag():
     assert "GPS fix is 42 s old" in s
 
 
+def test_context_camera_count_is_exact():
+    cams = [{"type": "speed", "distance_ahead_km": k, "limit_kmh": 80}
+            for k in (1.0, 3.5, 7.0, 9.9, 14.2, 18.0, 22.5)]
+    s = v2._format_context_v2({"cameras_ahead": cams, "dest_name": "X"})
+    assert "Speed cameras ahead: 7 total" in s
+
+
+def test_context_schedule_ahead_and_bridges():
+    s = v2._format_context_v2({
+        "dest_name": "X", "schedule_delta_min": -6,
+        "bridges_ahead": {"count": 2, "next_km": 1.5, "next_action": "take it"},
+        "saved_places": {"home": {"name": "Home", "lat": 1, "lng": 2}},
+        "parking": {"lat": 30.0, "lng": 31.0, "age_min": 40}})
+    assert "AHEAD of the original ETA" in s
+    assert "Bridges/flyovers ahead: 2" in s and "take it" in s
+    assert "Saved places available: home" in s
+    assert "Car parked at a saved spot (40 min ago)" in s
+
+
 def test_sun_times_cairo_sane():
     from datetime import datetime, timezone
     # Aug 27, 12:00 UTC (15:00 Cairo) — daylight; sunset ~18:2x local
