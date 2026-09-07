@@ -49,7 +49,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from api.copilot_lang import (resolve_language, reply_lang_ok, split_sentences)
-from api.copilot_fastpath import try_fastpath
+from api.copilot_fastpath import try_fastpath, match_action
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
 
@@ -120,6 +120,10 @@ TRUTH — the live trip data ALWAYS wins:
   trip data is right. A missing field means you genuinely don't have it: say
   so honestly in one short sentence and offer what you DO know.
 - "Traffic ahead: none detected" means the road is clear — say it confidently.
+- You have NO road-closure data and NO weather. Never say a road is "open"
+  or "closed"; never describe the sky, sunset or temperature. For "is X
+  open?" say what the router offers («فيه طريق عن طريق الدائري أسرع بأربع
+  دقايق») and that closures aren't something you can see.
 - General questions (history, football, anything) — answer briefly, and tie
   back to the drive when natural.
 
@@ -168,6 +172,18 @@ speak (a driving assistant minimizes confirmations — like Google Maps):
   commit="ask"     → high-stakes (end navigation). One clear yes/no.
 - Call the tool RIGHT AWAY when the request is clear. Never ask first, then
   call, then ask again.
+- OUTSIDE YOUR TOOLS — say so in ONE sentence and offer the nearest thing
+  you CAN do; NEVER substitute a different action for what was asked. You
+  cannot call a PERSON or contact (call_place dials a business/place's listed
+  number, and only when asked to call it), book or reserve anything, control
+  the car (AC, windows, music), or send messages.
+- add_stop with no place AND no category («ضيف وقفة», "add a stop") → ask ONE
+  short question: a stop where — gas, pharmacy, food? Never search the
+  literal word "stop" / «وقفة».
+- report_incident ONLY on an explicit report. A question about hazards («فيه
+  حادثة قدامي», "any accident ahead") is answered from the trip data. The
+  transcript carries no question marks: when unsure, ask «تقصد أبلّغ عن
+  حادثة؟» / "do you want me to report an accident here?".
 - MULTI-INTENT («شيل الزحمة وقفلي على أقرب بنزينة»): call the tools one after
   another in the SAME turn, then speak ONE coherent summary in their order.
   At most one action can await confirmation — if a second would, do the first
@@ -187,6 +203,9 @@ CONFIRMATIONS — interpret like a human:
   («لا التانية»), a correction, or a brand-new request. Extract the real
   decision; a correction = rejection PLUS the corrected search in the SAME
   turn. Never read a full sentence as a bare "no".
+- After an action with commit=done or auto, a bare "yes / ok / تمام / ايوه"
+  is an ACKNOWLEDGEMENT: reply with one word and take no action — never run
+  the same action again.
 
 MEMORY:
 - The conversation history is this trip's shared memory. Refer back naturally.
@@ -284,8 +303,11 @@ _NEW_TOOLS: List[Dict] = [
        "cancels a reminder.",
        {"minutes_before": {"type": "integer"}}, ["minutes_before"]),
     _T("call_place",
-       "Look up a place's phone number and open the dialer. place_name for a "
-       "named place; omit it to call the DESTINATION.",
+       "Look up a BUSINESS/PLACE's listed phone number and preview a call "
+       "(the driver confirms). place_name for a named business the user "
+       "asked to call; omit it to call the DESTINATION. NEVER for a person "
+       "or contact ('call my mom', «اتصل بماما») — there is no contact list; "
+       "say so instead.",
        {"place_name": {"type": "string"}}, []),
 ]
 
@@ -305,6 +327,19 @@ def _tools_v2() -> List[Dict]:
                            "description": "1-based index from the alternatives"},
                  "road_name": {"type": "string"},
                  "selector": {"type": "string", "enum": ["fastest"]}}, []))
+        elif tl["function"]["name"] == "report_incident":
+            out.append(_T(
+                "report_incident",
+                "Report a road incident at the CURRENT location — ONLY on an "
+                "explicit report ('report an accident here', «بلّغ عن حادثة», "
+                "«فيه رادار هنا، بلّغ»). A QUESTION about hazards («فيه حادثة "
+                "قدامي؟», 'is there an accident ahead') is answered from the "
+                "trip data and is NEVER a report. Previews; the driver must "
+                "say yes.",
+                {"kind": {"type": "string",
+                          "enum": ["radar", "accident", "hazard", "police",
+                                   "traffic", "road_closed"]}},
+                ["kind"]))
         else:
             out.append(tl)
     return out + _NEW_TOOLS
@@ -316,7 +351,8 @@ TOOLS_V2 = _tools_v2()
 # (the post-execution requires_confirm check is the authoritative gate; this
 # set just skips executing tools whose confirm slot is already taken).
 _CONFIRM_TOOLS = {"add_stop", "reroute_via", "change_destination",
-                  "navigate_saved", "cancel_navigation"}
+                  "navigate_saved", "cancel_navigation", "report_incident",
+                  "call_place"}
 
 
 # ── Sunrise / sunset (NOAA simplified — pure math, no network) ────────────────
@@ -689,6 +725,17 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
         if name == "traffic_check":
             return await _traffic_check(ctx), None
 
+        if name == "report_incident":
+            kind = args.get("kind", "hazard")
+            # A shared side effect on a transcript that carries no question
+            # mark («فيه حادثة قدامي» was reported as an accident in the
+            # 2026-09 probe) → PREVIEW + the driver's yes.
+            return {"ok": True, "kind": kind, "commit": "confirm",
+                    "note": f"NOT sent yet. Ask ONE short yes/no: report this "
+                            f"{kind} here? Never say it's done."}, \
+                   {"type": "report_incident", "kind": kind,
+                    "requires_confirm": True, "commit": "confirm"}
+
         if name == "route_options":
             reset = bool(args.get("reset"))
             tolls = bool(args.get("avoid_tolls"))
@@ -907,13 +954,15 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
                 return {"found": False, "place": target,
                         "note": "No phone number is listed for that place — "
                                 "say so honestly."}, None
-            return {"found": True, "place": (det or {}).get("name", target),
-                    "commit": "done",
-                    "note": "The dialer is opening with the number — tell "
-                            "them to tap call."}, \
-                   {"type": "dial", "number": phone,
-                    "place": (det or {}).get("name", target),
-                    "requires_confirm": False, "commit": "done"}
+            found_name = (det or {}).get("name", target)
+            # A phone call is a side effect the driver did not see coming
+            # («اتصل بماما» once dialed a restaurant called "Mama dahab") →
+            # PREVIEW: "Call <place>?" and the pill; the client dials on yes.
+            return {"found": True, "place": found_name, "commit": "confirm",
+                    "note": f"NOT dialing yet. Ask ONE short yes/no: call "
+                            f"{found_name}? Never say it's done."}, \
+                   {"type": "dial", "number": phone, "place": found_name,
+                    "requires_confirm": True, "commit": "confirm"}
 
         if name == "switch_route" and args.get("selector") == "fastest" \
                 and args.get("index") is None and not args.get("road_name"):
@@ -1191,6 +1240,29 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         for l in await em.delta(fp):
             yield l
         yield em.done(False)
+        return
+
+    # ── Deterministic ACTION fast-path (mute/unmute/repeat/volume) ───────────
+    fa = None if req.pending_action else match_action(user_text)
+    if fa:
+        key, action = fa
+        logger.info(f"copilot v2 fastpath action {action['type']}")
+        yield em.action(action)
+        for l in await em.delta(S(key, lang)):
+            yield l
+        yield em.done(False)
+        return
+
+    # ── A refused language switch = the wrong-mic signature ──────────────────
+    # The recognizer that was open in the OTHER language produced words at low
+    # confidence. Guessing an intent from that text is how a garbled English
+    # result mid-Arabic-conversation turned into a confident traffic summary
+    # (2026-09 probe). Confirm, don't guess — and re-open the mic.
+    if res.source == "guard":
+        logger.info("copilot v2 refused switch → confirming question")
+        for l in await em.delta(S("unclear_ask", lang)):
+            yield l
+        yield em.done(True)
         return
 
     lang_rule = _lang_rule(lang, res.arabizi, res.unreliable)

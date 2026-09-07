@@ -206,6 +206,13 @@ _MSA_TO_EGY = {
     "رائع": "حلو", "ممتاز": "تمام", "للأسف": "معلش", "عذرًا": "معلش",
     "عذراً": "معلش", "آسف": "معلش", "أعتذر": "معلش", "الرجاء": "لو سمحت",
     "من فضلك": "لو سمحت", "رجاءً": "لو سمحت",
+    # the model's own fossils seen in the 2026-09 quality probe
+    "مئتين": "ميتين", "مائتين": "ميتين", "مائة": "مية", "مئة": "مية",
+    "ثلاثة": "تلاتة", "ثلاث": "تلات", "ثلاثين": "تلاتين", "ثمانية": "تمانية",
+    "ثماني": "تماني", "ثمانين": "تمانين", "عبر": "عن طريق",
+    # speed cameras are «رادار» in Cairo, never «كاميرا»
+    "كاميرا": "رادار", "كاميرات": "رادارات", "الكاميرا": "الرادار",
+    "الكاميرات": "الرادارات",
 }
 _FUTURE_RE = re.compile(r"(?<![؀-ۿ])سوف\s+(?=[يتنأا][؀-ۿ])")
 # The navigator's imperatives are ambiguous without vowels: unvocalized «خد»
@@ -217,16 +224,47 @@ _IMPERATIVE_RE = re.compile(
     "(?<![؀-ۿ])(" + "|".join(re.escape(k) for k in
                              sorted(_IMPERATIVE_DIACRITICS, key=len, reverse=True)) + ")(?![؀-ۿ])")
 _MSA_RE = re.compile(
-    "(?<![؀-ۿ])(" + "|".join(re.escape(k) for k in
-                             sorted(_MSA_TO_EGY, key=len, reverse=True)) + ")(?![؀-ۿ])")
+    "(?<![؀-ۿ])(و|ف)?(" + "|".join(re.escape(k) for k in
+                                  sorted(_MSA_TO_EGY, key=len, reverse=True)) + ")(?![؀-ۿ])")
+
+
+# Latin road/area names inside an Arabic line: the engine flips to an English
+# accent mid-sentence («انت ماشي على Salah Salem»). The trip data carries the
+# map's (often English) names; on an ARABIC line the well-known ones are
+# spoken the way a Cairene says them. Whole words, case-insensitive, a
+# leading "the" absorbed; only certain, unambiguous entries.
+_LATIN_PLACES = {
+    "salah salem": "صلاح سالم", "ring road": "الدائري", "mehwar": "المحور",
+    "autostrad": "الأوتوستراد", "6th of october bridge": "كوبري أكتوبر",
+    "6th october bridge": "كوبري أكتوبر", "october bridge": "كوبري أكتوبر",
+    "26th of july corridor": "محور 26 يوليو", "26 july corridor": "محور 26 يوليو",
+    "tahrir square": "ميدان التحرير", "nasr city": "مدينة نصر",
+    "heliopolis": "مصر الجديدة", "maadi": "المعادي", "zamalek": "الزمالك",
+    "mohandessin": "المهندسين", "mohandeseen": "المهندسين", "mohandiseen": "المهندسين",
+    "dokki": "الدقي", "giza": "الجيزة", "new cairo": "التجمع",
+    "sheikh zayed": "الشيخ زايد", "cairo airport": "مطار القاهرة",
+    "corniche": "الكورنيش", "downtown": "وسط البلد", "haram": "الهرم",
+    "pyramids road": "شارع الهرم", "abbasiya": "العباسية", "ramses": "رمسيس",
+    "shubra": "شبرا", "madinaty": "مدينتي", "rehab": "الرحاب", "obour": "العبور",
+    "mokattam": "المقطم", "muqattam": "المقطم", "nozha": "النزهة",
+    "salam road": "طريق السلام", "cairo alexandria desert road": "طريق مصر إسكندرية الصحراوي",
+    "suez road": "طريق السويس", "ismailia road": "طريق الإسماعيلية",
+}
+_LATIN_PLACES_RE = re.compile(
+    r"(?<![A-Za-z])(?:the\s+)?(" + "|".join(
+        re.escape(k) for k in sorted(_LATIN_PLACES, key=len, reverse=True)) + r")(?![A-Za-z])",
+    re.IGNORECASE)
+_FULLWIDTH = {c: chr(c - 0xFEE0) for c in range(0xFF01, 0xFF5F)}
 
 
 def masri(text: str) -> str:
-    """Egyptianize the wording (formal fossils) AND the numbers of an Arabic
-    line. Idempotent."""
+    """Egyptianize the wording (formal fossils), the place names and the
+    numbers of an Arabic line. Idempotent."""
     if not text:
         return text
-    t = _FUTURE_RE.sub("ه", text)                 # «سوف يكون» → «هيكون»
-    t = _MSA_RE.sub(lambda m: _MSA_TO_EGY[m.group(1)], t)
+    t = text.translate(_FULLWIDTH)                # «الـＧＰＳ» → «الـGPS»
+    t = _FUTURE_RE.sub("ه", t)                    # «سوف يكون» → «هيكون»
+    t = _MSA_RE.sub(lambda m: (m.group(1) or "") + _MSA_TO_EGY[m.group(2)], t)
     t = _IMPERATIVE_RE.sub(lambda m: _IMPERATIVE_DIACRITICS[m.group(1)], t)
+    t = _LATIN_PLACES_RE.sub(lambda m: _LATIN_PLACES[m.group(1).lower()], t)
     return egyptianize(t)

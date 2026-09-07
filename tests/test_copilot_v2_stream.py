@@ -426,3 +426,74 @@ def test_sun_times_cairo_sane():
     r2 = v2._sun_times(30.05, 31.23, 180,
                        datetime(2026, 8, 27, 17, 0, tzinfo=timezone.utc))
     assert r2[2] is True
+
+
+# ═══ 2026-09 closeout: JOB 3 findings turned into contracts ═══════════════════
+def test_action_fastpath_mute_needs_no_model(monkeypatch):
+    req = FakeReq("mute", ctx={"eta_min": 5})
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "MODEL MUST NOT RUN")]], monkeypatch))
+    assert calls == []
+    assert actions(lines) == [{"type": "set_guidance_voice", "muted": True,
+                               "requires_confirm": False}]
+    assert deltas(lines).strip() == "Guidance muted."
+    assert done(lines)["expects_reply"] is False
+
+
+def test_action_fastpath_repeat_in_arabic(monkeypatch):
+    req = FakeReq("قول تاني", ctx={"eta_min": 5}, prev_lang="ar")
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "MODEL MUST NOT RUN")]], monkeypatch))
+    assert calls == []
+    assert lines[0]["lang"] == "ar"
+    assert actions(lines)[0]["type"] == "repeat_instruction"
+    assert deltas(lines).strip() == "حاضر."
+
+
+def test_action_fastpath_yields_to_a_pending_confirmation(monkeypatch):
+    req = FakeReq("mute", ctx={"eta_min": 5}, pending_action={"type": "add_stop"})
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "Okay, muted. ")]], monkeypatch))
+    assert len(calls) == 1          # the model saw it (it may be an answer to the pill)
+
+
+def test_refused_switch_confirms_instead_of_guessing(monkeypatch):
+    req = FakeReq("and the uh sink", ctx={"traffic_delay_min": 6}, prev_lang="ar")
+    req.stt_lang, req.stt_confidence = "en", 0.3
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "MODEL MUST NOT RUN")]], monkeypatch))
+    assert calls == []
+    assert lines[0]["lang"] == "ar"
+    assert deltas(lines).strip() == "معلش، قولها تاني؟"
+    assert done(lines)["expects_reply"] is True
+
+
+def test_report_incident_previews_and_needs_yes(monkeypatch):
+    req = FakeReq("فيه حادثة قدامي", ctx={"eta_min": 5}, prev_lang="ar")
+    script = [
+        [("tool_calls", [{"id": "c1", "name": "report_incident",
+                          "args": '{"kind": "accident"}'}])],
+        [("delta", "تقصد أبلّغ عن حادثة هنا؟ ")],
+    ]
+    lines, calls = asyncio.run(run_turn(req, script, monkeypatch))
+    acts = actions(lines)
+    assert acts == [{"type": "report_incident", "kind": "accident",
+                     "requires_confirm": True, "commit": "confirm"}]
+    assert done(lines)["expects_reply"] is True
+
+
+def test_call_place_previews_and_needs_yes(monkeypatch):
+    async def fake_search(lat, lng, query, limit=1, **kw):
+        return [{"id": "p1", "name": "Master Gas"}]
+
+    async def fake_details(pid):
+        return {"name": "Master Gas", "phone": "+20 10 0000 0000"}
+    monkeypatch.setattr(base, "search_places", fake_search)
+    monkeypatch.setattr(base, "place_details_rich", fake_details)
+    req = FakeReq("call master", ctx={"user_lat": 30.0, "user_lng": 31.2})
+    script = [
+        [("tool_calls", [{"id": "c1", "name": "call_place",
+                          "args": '{"place_name": "Master"}'}])],
+        [("delta", "Call Master Gas? ")],
+    ]
+    lines, calls = asyncio.run(run_turn(req, script, monkeypatch))
+    acts = actions(lines)
+    assert len(acts) == 1 and acts[0]["type"] == "dial"
+    assert acts[0]["requires_confirm"] is True and acts[0]["commit"] == "confirm"
+    assert acts[0]["place"] == "Master Gas"

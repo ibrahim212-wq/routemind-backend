@@ -29,6 +29,12 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "err_no_input": {"en": "I didn't catch that.", "ar": "مسمعتش. قول تاني؟"},
     # A garbled / low-confidence transcript: confirm before acting.
     "unclear_ask":  {"en": "Say that once more?", "ar": "معلش، قولها تاني؟"},
+    # Deterministic single-intent commands (no model in the loop): the ack.
+    "ack_muted":    {"en": "Guidance muted.",   "ar": "قفلت الصوت."},
+    "ack_unmuted":  {"en": "Voice is back on.", "ar": "رجّعت الصوت."},
+    "ack_repeat":   {"en": "Sure.",             "ar": "حاضر."},
+    "ack_louder":   {"en": "Louder.",           "ar": "علّيت الصوت."},
+    "ack_quieter":  {"en": "Quieter.",          "ar": "وطّيت الصوت."},
 }
 
 KEYS = frozenset(_STRINGS.keys())

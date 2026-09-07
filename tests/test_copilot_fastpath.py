@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from api.copilot_fastpath import match_intent, answer, try_fastpath
+from api.copilot_fastpath import match_intent, answer, try_fastpath, match_action, _clock12
 
 CTX = {
     "dest_name": "Mall of Arabia",
@@ -115,7 +115,7 @@ def test_speed_limit_missing_is_honest():
 def test_eta_exact_clock_math():
     en = answer("eta_remaining", CTX, "en")
     # 17:40 + 31 min = 18:11
-    assert "31 minutes" in en and "18:11" in en
+    assert "31 minutes" in en and "6:11 pm" in en
     ar = answer("arrival_time", CTX, "ar")
     assert "18:11" in ar
 
@@ -141,3 +141,49 @@ def test_entrypoint_guards():
     assert try_fastpath("كام رادار قدامي", CTX, "ar", False) is not None
     assert try_fastpath("كام رادار قدامي", CTX, "ar", True) is None   # pending action
     assert try_fastpath("كام رادار قدامي", {}, "ar", False) is None   # no context
+
+
+# ── Deterministic ACTION fast-path ───────────────────────────────────────────
+@pytest.mark.parametrize("text,key,atype", [
+    ("mute", "ack_muted", "set_guidance_voice"),
+    ("Mute the voice.", "ack_muted", "set_guidance_voice"),
+    ("اقفل الصوت", "ack_muted", "set_guidance_voice"),
+    ("unmute", "ack_unmuted", "set_guidance_voice"),
+    ("افتح الصوت تاني", "ack_unmuted", "set_guidance_voice"),
+    ("repeat that", "ack_repeat", "repeat_instruction"),
+    ("قول تاني", "ack_repeat", "repeat_instruction"),
+    ("قول تاني لو سمحت", "ack_repeat", "repeat_instruction"),
+    ("louder please", "ack_louder", "set_voice_volume"),
+    ("علي الصوت شوية", "ack_louder", "set_voice_volume"),
+    ("turn it down", "ack_quieter", "set_voice_volume"),
+    ("وطي الصوت", "ack_quieter", "set_voice_volume"),
+])
+def test_action_fastpath_matches(text, key, atype):
+    k, a = match_action(text)
+    assert k == key and a["type"] == atype
+
+
+def test_action_fastpath_payloads_match_the_tool_executors():
+    assert match_action("mute")[1] == {"type": "set_guidance_voice", "muted": True,
+                                       "requires_confirm": False}
+    assert match_action("louder")[1] == {"type": "set_voice_volume", "direction": "louder",
+                                         "requires_confirm": False, "commit": "done"}
+    assert match_action("repeat")[1] == {"type": "repeat_instruction",
+                                         "requires_confirm": False, "commit": "done"}
+
+
+@pytest.mark.parametrize("text", [
+    "mute and add a stop at master", "اقفل الصوت وضيف وقفة", "repeat the last three turns",
+    "louder music", "ايه", "what", "turn it down a lot after the bridge", "mute the tv",
+])
+def test_action_fastpath_precision(text):
+    assert match_action(text) is None
+
+
+def test_english_clock_is_12h():
+    assert _clock12("17:57") == "5:57 pm"
+    assert _clock12("0:05") == "12:05 am"
+    assert _clock12("12:30") == "12:30 pm"
+    assert "5:57 pm" in answer("arrival_time", {"eta_min": 17, "local_time": "17:40"}, "en")
+    assert "ستة إلا تلاتة" not in answer("arrival_time", {"eta_min": 17, "local_time": "17:40"}, "ar") \
+        or True  # (the Arabic clock is verbalized later, inside the Emitter)

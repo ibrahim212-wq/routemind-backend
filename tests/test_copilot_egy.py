@@ -96,3 +96,21 @@ def test_english_line_is_never_passed_here_but_survives():
     # the gate only calls masri for lang=ar; if it ever received English it
     # must not corrupt it
     assert masri("Heavy traffic in about 2 kilometers") == "Heavy traffic in about 2 kilometers"
+
+
+def test_latin_road_names_spoken_in_arabic():
+    assert masri("انت ماشي على Salah Salem.") == "انت ماشي على صلاح سالم."
+    assert masri("أسرع طريق دلوقتي عبر the Ring Road") == "أسرع طريق دلوقتي عن طريق الدائري"
+    assert masri("خد المحور لحد Sheikh Zayed") == "خُد المحور لحد الشيخ زايد"
+    # a brand that merely contains a place word is left alone (whole word only)
+    assert "Mohandessinia" in masri("مطعم Mohandessinia")
+    # English lines never pass through masri; a Latin name inside an English
+    # sentence on an Arabic line stays readable
+    assert masri("Ring Road Mall قدامك") == "الدائري Mall قدامك"
+
+
+def test_fullwidth_latin_and_more_fossils():
+    assert masri("أول ما الـＧＰＳ يرجع") == "أول ما الـGPS يرجع"
+    assert masri("كيلو ومئتين متر") == "كيلو وميتين متر"
+    assert masri("فيه تلات كاميرات قدامك") == "فيه تلات رادارات قدامك"
+    assert masri("ثلاثة كيلو") == "تلاتة كيلو"

@@ -431,7 +431,7 @@ def _guard_switch(r: ResolvedLang, prev: Optional[str],
     a recognizer that was open in the OTHER language: that is the signature
     of the wrong mic, not of the driver changing language."""
     if prev and r.lang != prev and conf is not None and conf < STT_SWITCH_MIN_CONF:
-        return ResolvedLang(prev, "sticky", False, unreliable=True)
+        return ResolvedLang(prev, "guard", False, unreliable=True)
     return r
 
 

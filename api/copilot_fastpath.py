@@ -125,6 +125,16 @@ def _clock_after(local_time: str, minutes: int) -> Optional[str]:
     return f"{total // 60}:{total % 60:02d}"
 
 
+def _clock12(hhmm: str) -> str:
+    """'17:57' → '5:57 pm' — the way an English speaker hears a clock time."""
+    m = re.match(r"^(\d{1,2}):(\d{2})$", hhmm or "")
+    if not m:
+        return hhmm
+    h, mi = int(m.group(1)), int(m.group(2))
+    suffix = "am" if h < 12 else "pm"
+    return f"{h % 12 or 12}:{mi:02d} {suffix}"
+
+
 def _radar_count_ar(n: int) -> str:
     if n == 1:
         return "رادار واحد"
@@ -238,7 +248,7 @@ def answer(intent: str, ctx: Dict[str, Any], lang: str) -> Optional[str]:
         clock = _clock_after(ctx.get("local_time") or "", int(eta))
         if clock:
             return (f"هتوصل حوالي الساعة {clock}." if ar
-                    else f"You'll arrive around {clock}.")
+                    else f"You'll arrive around {_clock12(clock)}.")
         return (f"فاضل {speak_minutes(int(eta), lang)} تقريبًا." if ar
                 else f"About {speak_minutes(int(eta), lang)} to go.")
 
@@ -255,7 +265,7 @@ def answer(intent: str, ctx: Dict[str, Any], lang: str) -> Optional[str]:
             return s + "."
         s = f"About {mins} to go"
         if clock:
-            s += f", arriving around {clock}"
+            s += f", arriving around {_clock12(clock)}"
         return s + "."
 
     if intent == "distance_remaining":
@@ -277,3 +287,44 @@ def try_fastpath(text: str, ctx: Dict[str, Any], lang: str,
     if not intent:
         return None
     return answer(intent, ctx, lang)
+
+
+# ── Deterministic ACTION fast-path ───────────────────────────────────────────
+# Single-intent commands whose meaning cannot be mistaken and whose action
+# needs no data: they used to cost a full model round (≈3 s to "Muted") for
+# a one-word ack. Exact, whole-utterance patterns only — anything longer or
+# combined goes to the model as before.
+_ACTION_FAST = [
+    ("ack_muted", {"type": "set_guidance_voice", "muted": True, "requires_confirm": False}, _rx(
+        r"^(mute|mute (the )?(voice|guidance|sound|navigation)|voice off|"
+        r"turn (the )?(voice|sound) off|silence( the voice)?)$",
+        r"^(اقفل|أقفل|وقف|وقّف|سكت|سكّت|اسكت|إسكت) (الصوت|صوتك)$", r"^(اسكت|إسكت)$")),
+    ("ack_unmuted", {"type": "set_guidance_voice", "muted": False, "requires_confirm": False}, _rx(
+        r"^(unmute|voice on|turn (the )?(voice|sound) (back )?on|speak again)$",
+        r"^(افتح|إفتح|رجع|رجّع|شغل|شغّل) (الصوت|صوتك)( تاني)?$")),
+    ("ack_repeat", {"type": "repeat_instruction", "requires_confirm": False, "commit": "done"}, _rx(
+        r"^(repeat( that| it)?|say (that|it) again|what did you say|come again|"
+        r"again please|repeat the instruction)$",
+        r"^(قول تاني|قولها تاني|عيد|عيد تاني|عيدها|كرر|كرّر|قلت ايه|قلت إيه|ايه قلت|إيه قلت)$")),
+    ("ack_louder", {"type": "set_voice_volume", "direction": "louder", "requires_confirm": False,
+                    "commit": "done"}, _rx(
+        r"^(louder|turn it up|volume up|speak up|a bit louder|louder please)$",
+        r"^(علي|على|علّي|ارفع|إرفع|زود|زوّد) (الصوت|صوتك)( شوية| شويه)?$")),
+    ("ack_quieter", {"type": "set_voice_volume", "direction": "quieter", "requires_confirm": False,
+                     "commit": "done"}, _rx(
+        r"^(quieter|turn it down|volume down|lower the volume|softer|a bit quieter|not so loud)$",
+        r"^(وطي|وطّي|وطى|قلل|قلّل|نزل|نزّل|هدي|هدّي) (الصوت|صوتك)( شوية| شويه)?$")),
+]
+_POLITE = re.compile(r"\b(please|plz)\b|لو سمحت|من فضلك|يا باشا|يا معلم|بالله", re.I)
+_TRAIL_PUNCT = re.compile(r"[\s.!?؟،,…]+$")
+
+
+def match_action(text: str):
+    """(ack_key, action) for an unmistakable single-intent command, else None."""
+    t = (text or "").lower()
+    t = _POLITE.sub(" ", t)
+    t = _TRAIL_PUNCT.sub("", " ".join(t.split())).strip()
+    if not t or len(t.split()) > 5:
+        return None
+    hits = [(k, dict(a)) for k, a, rxs in _ACTION_FAST if any(r.search(t) for r in rxs)]
+    return hits[0] if len(hits) == 1 else None
