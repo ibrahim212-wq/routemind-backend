@@ -1,11 +1,10 @@
 """
 api/copilot_v2.py — CopilotV2: the rebuilt copilot turn engine.
 
-Reached ONLY when the client sends {"v2": true} (the CopilotV2 feature flag);
-without it api/copilot.py serves the legacy turn byte-for-byte — that IS the
-kill-switch.
+THE turn engine — every request to /api/copilot/converse runs here (the former
+un-validated legacy generator was deleted; git history is the rollback).
 
-What v2 changes over the legacy generator:
+What it guarantees:
 
   LANGUAGE (the contract)
   • ONE resolve_language() per turn (api/copilot_lang.py): explicit requests >
@@ -51,6 +50,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from api.copilot_lang import (resolve_language, reply_lang_ok, split_sentences)
 from api.copilot_fastpath import try_fastpath
+from api.copilot_egy import masri
 from api.copilot_strings import t as S
 
 logger = logging.getLogger("routemind.copilot.v2")
@@ -92,6 +92,9 @@ SPOKEN NUMBERS — TTS mangles decimals:
 - Never speak a decimal. Round for the ear: 1.4 km → "about a kilometer and a
   half" / «كيلو ونص تقريبًا»; 27.8 km → "about 28 kilometers". Prefer TIME
   over distance when both are known. One rounded number per fact.
+- IN ARABIC write every number as an EGYPTIAN WORD, never a digit: «تلات
+  رادارات», «تمانين», «سبعتاشر دقيقة», «كيلوين», «ستة إلا ربع» for 5:45.
+  "Left" is «شمال», never «يسار». Distances are «كيلو» / «متر».
 
 EARS — you receive a NOISY in-car transcript, not typed text:
 - Expect mishears, dropped words, franco-Arabic, English brands rendered in
@@ -1033,7 +1036,7 @@ async def _gated_pass(messages: List[Dict], lang: str, with_tools: bool,
     return r
 
 
-def _lang_rule(lang: str, arabizi: bool) -> str:
+def _lang_rule(lang: str, arabizi: bool, unreliable: bool = False) -> str:
     if lang == "ar":
         rule = ("RESPONSE LANGUAGE FOR THIS TURN (hard requirement): Egyptian "
                 "colloquial Arabic (masri), in ARABIC SCRIPT — never فصحى, "
@@ -1046,8 +1049,15 @@ def _lang_rule(lang: str, arabizi: bool) -> str:
         rule = ("RESPONSE LANGUAGE FOR THIS TURN (hard requirement): natural "
                 "English. Brand/place names may stay in their natural "
                 "script.")
-    return rule + (" This pin already honors any language request inside the "
-                   "user's message — follow it exactly.")
+    rule += (" This pin already honors any language request inside the "
+             "user's message — follow it exactly.")
+    if unreliable:
+        rule += (" The transcript is garbled or low-confidence: if it is not "
+                 "clearly a request you can act on, ask ONE short confirming "
+                 "question in the pinned language instead of guessing or "
+                 "acting; never say you didn't understand in the other "
+                 "language.")
+    return rule
 
 
 _CORRECTIVE = ("YOUR PREVIOUS DRAFT WAS IN THE WRONG LANGUAGE AND WAS "
@@ -1073,44 +1083,117 @@ def _norm_sentence(s: str) -> str:
     return "".join(c for c in s.lower() if c not in _PUNCT)
 
 
-# ── The v2 turn generator ─────────────────────────────────────────────────────
-async def stream_v2(req) -> AsyncGenerator[str, None]:
-    def line(obj: Dict) -> str:
+# ── THE single exit for user-facing output ────────────────────────────────────
+class _Emitter:
+    """Every NDJSON line the client receives is produced HERE and nowhere
+    else. That is the structural language guarantee: delta() is the one gate
+    (Egyptian verbalization for Arabic → reply_lang_ok → deterministic
+    translation → drop) plus the say-it-once guard; error() always carries a
+    spoken line in the resolved language; meta() precedes all text. A code
+    path that wants to put text in front of the driver has no other way to
+    do it — tests/test_copilot_emitter.py fails if one appears."""
+
+    __slots__ = ("lang", "arabizi", "emitted", "spoke", "_seen", "fixes", "drops")
+
+    def __init__(self, lang: str, arabizi: bool = False):
+        self.lang = lang
+        self.arabizi = arabizi
+        self.emitted: List[str] = []
+        self.spoke = False
+        self._seen: set = set()
+        self.fixes = 0
+        self.drops = 0
+
+    @staticmethod
+    def _line(obj: Dict) -> str:
         return json.dumps(obj, ensure_ascii=False) + "\n"
 
-    if not base.OPENAI_KEY:
-        yield line({"t": "error", "message": "assistant not configured"})
-        return
+    def meta(self) -> str:
+        return self._line({"t": "meta", "lang": self.lang, "v": 2})
 
+    async def delta(self, text: str) -> List[str]:
+        """Gate one sentence. Returns the lines to send (0 or 1)."""
+        text = (text or "").strip()
+        if not text:
+            return []
+        if self.lang == "ar":
+            text = masri(text)                       # Egyptian numbers/wording
+        if not reply_lang_ok(text, self.lang):
+            logger.warning(f"copilot gate: sentence not {self.lang} — translating")
+            fixed = await _translate(text, self.lang)
+            if fixed and reply_lang_ok(fixed, self.lang):
+                text = masri(fixed) if self.lang == "ar" else fixed
+                self.fixes += 1
+            else:
+                logger.error("copilot gate: DROPPED a sentence that could not "
+                             f"be brought to {self.lang}")
+                self.drops += 1
+                return []
+        key = _norm_sentence(text)
+        if len(key) >= _DEDUP_MIN_CHARS:
+            if key in self._seen:
+                logger.info("copilot gate: dropped a repeated sentence")
+                return []
+            self._seen.add(key)
+        self.emitted.append(text)
+        self.spoke = True
+        return [self._line({"t": "delta", "text": text + " "})]
+
+    def action(self, a: Dict) -> str:
+        return self._line({"t": "action", "action": a})
+
+    def done(self, expects_reply: bool) -> str:
+        return self._line({"t": "done", "expects_reply": expects_reply,
+                           "lang": self.lang})
+
+    def error(self, code: str, spoken_key: str = "err_spoken") -> str:
+        """An error line carries the localized spoken text — the client speaks
+        `spoken` verbatim, so an error can never be the wrong-language reply."""
+        return self._line({"t": "error", "code": code, "message": code,
+                           "spoken": S(spoken_key, self.lang), "lang": self.lang})
+
+
+# ── The v2 turn generator ─────────────────────────────────────────────────────
+async def stream_v2(req) -> AsyncGenerator[str, None]:
     history = [m for m in req.messages
                if m.get("role") in ("user", "assistant") and m.get("content")]
     history = history[-base.HISTORY_MAX:]
-    if not history or history[-1]["role"] != "user":
-        yield line({"t": "error", "message": "no user message"})
+    ctx = req.context or {}
+    user_text = history[-1]["content"] if history and history[-1]["role"] == "user" else ""
+
+    # The language is resolved FIRST, from whatever we have — so even the
+    # "nothing to answer" errors below are spoken in the right language.
+    res = resolve_language(user_text, prev_lang=req.prev_lang,
+                           app_lang=req.app_lang,
+                           stt_lang=getattr(req, "stt_lang", None),
+                           stt_confidence=getattr(req, "stt_confidence", None))
+    lang = res.lang
+    em = _Emitter(lang, res.arabizi)
+    yield em.meta()
+
+    if not base.OPENAI_KEY:
+        yield em.error("not_configured")
+        return
+    if not user_text.strip():
+        yield em.error("no_user_message", "err_no_input")
         return
 
-    ctx = req.context or {}
-    user_text = history[-1]["content"]
-    res = resolve_language(user_text, prev_lang=req.prev_lang,
-                           app_lang=req.app_lang)
-    lang = res.lang
     t0 = time.monotonic()
     logger.info(f"copilot v2 turn: lang={lang} src={res.source} "
-                f"arabizi={res.arabizi} history={len(history)}")
-
-    # The client pins voice + UI direction off this before any text arrives.
-    yield line({"t": "meta", "lang": lang, "v": 2})
+                f"arabizi={res.arabizi} unreliable={res.unreliable} "
+                f"history={len(history)}")
 
     # ── Deterministic fact fast-path (no model in the loop) ──────────────────
     fp = try_fastpath(user_text, ctx, lang,
                       has_pending_action=bool(req.pending_action))
     if fp:
         logger.info("copilot v2 fastpath answer")
-        yield line({"t": "delta", "text": fp})
-        yield line({"t": "done", "expects_reply": False, "lang": lang})
+        for l in await em.delta(fp):
+            yield l
+        yield em.done(False)
         return
 
-    lang_rule = _lang_rule(lang, res.arabizi)
+    lang_rule = _lang_rule(lang, res.arabizi, res.unreliable)
     ctx_block = _format_context_v2(ctx)
     pending = ""
     if req.pending_action:
@@ -1128,28 +1211,13 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
     async def emit(sentence: str):
         await out_q.put(sentence)
 
-    spoke = False
     confirm_used = False
     expects_confirm = False
-    emitted_text: List[str] = []
-    spoken_norm: set = set()          # say-it-once guard (see _norm_sentence)
-
-    def already_said(sentence: str) -> bool:
-        """True when this sentence was already spoken THIS turn (and is long
-        enough to be worth suppressing) — the pre-tool/post-tool repeat."""
-        key = _norm_sentence(sentence)
-        if len(key) < _DEDUP_MIN_CHARS:
-            return False
-        if key in spoken_norm:
-            logger.info("copilot v2 dedup: dropped a repeated sentence")
-            return True
-        spoken_norm.add(key)
-        return False
 
     async def run_pass(with_tools: bool) -> _GateResult:
-        """gated pass + regenerate-once + translate fallback. Failing text
-        never reaches the queue."""
-        nonlocal spoke
+        """gated pass + regenerate-once + translate fallback (better prose
+        than the Emitter's per-sentence translation, which remains the
+        backstop for anything that slips through)."""
         r = await _gated_pass(messages, lang, with_tools, emit)
         if r.first_bad:
             logger.warning(f"copilot lang_fix regen: first sentence not {lang}")
@@ -1160,8 +1228,8 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                 fixed = await _translate(r2.full_text or r.full_text, lang)
                 if fixed and reply_lang_ok(fixed, lang):
                     sentences, _ = split_sentences(fixed, force=True)
-                    for s in sentences:
-                        await emit(s)
+                    for s_ in sentences:
+                        await emit(s_)
                     r2.sentences = sentences
                     r2.first_bad = False
             return r2
@@ -1180,22 +1248,15 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                     {pass_task, get_task},
                     return_when=asyncio.FIRST_COMPLETED)
                 if get_task in done:
-                    s = get_task.result()
-                    if not already_said(s):
-                        spoke = True
-                        emitted_text.append(s)
-                        yield line({"t": "delta", "text": s + " "})
+                    for l in await em.delta(get_task.result()):
+                        yield l
                     continue
                 get_task.cancel()
                 break
             result = pass_task.result()
             while not out_q.empty():
-                s = out_q.get_nowait()
-                if already_said(s):
-                    continue
-                spoke = True
-                emitted_text.append(s)
-                yield line({"t": "delta", "text": s + " "})
+                for l in await em.delta(out_q.get_nowait()):
+                    yield l
 
             if not result.tool_calls:
                 break
@@ -1216,11 +1277,10 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                 except Exception:
                     args = {}
                 # Spoken lead-in for the slow retrieval tools.
-                if tc["name"] in ("place_details", "find_places") and not spoke:
-                    lead = S("lead_details" if tc["name"] == "place_details"
-                             else "lead_search", lang)
-                    spoke = True
-                    yield line({"t": "delta", "text": lead + " "})
+                if tc["name"] in ("place_details", "find_places") and not em.spoke:
+                    for l in await em.delta(S("lead_details" if tc["name"] == "place_details"
+                                              else "lead_search", lang)):
+                        yield l
                 blocked_note: Dict[str, Any] = {
                     "blocked": True,
                     "note": "Another action already awaits the user's "
@@ -1240,7 +1300,7 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                         expects_confirm = True
                     if action.get("commit") == "auto":
                         expects_confirm = True
-                    yield line({"t": "action", "action": action})
+                    yield em.action(action)
                 messages.append({"role": "tool",
                                  "tool_call_id": tc["id"] or f"call_{i}",
                                  "content": json.dumps(result_obj,
@@ -1250,14 +1310,20 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
             over_budget = (time.monotonic() - t0) > TURN_BUDGET_S
             with_tools = rounds < MAX_TOOL_ROUNDS and not over_budget
 
-        if not spoke:
-            yield line({"t": "delta", "text": S("fallback_ok", lang)})
+        if not em.spoke:
+            # the model produced nothing usable (or the gate dropped it all)
+            key = "unclear_ask" if (res.unreliable or em.drops) else "fallback_ok"
+            for l in await em.delta(S(key, lang)):
+                yield l
 
         # expects_reply: a confirm/auto action is armed, or the reply asked
-        # the user something (mirrors the legacy heuristic).
-        full = " ".join(emitted_text).strip()
+        # the user something.
+        full = " ".join(em.emitted).strip()
         expects = expects_confirm or full.endswith("?") or full.endswith("؟")
-        yield line({"t": "done", "expects_reply": expects, "lang": lang})
+        if em.fixes or em.drops:
+            logger.warning(f"copilot gate summary: fixes={em.fixes} drops={em.drops}")
+        yield em.done(expects)
     except Exception as e:
         logger.error(f"copilot v2 converse failed: {e}")
-        yield line({"t": "error", "message": "upstream failure"})
+        code = "rate_limited" if "429" in str(e) else "upstream"
+        yield em.error(code, "err_busy" if code == "rate_limited" else "err_spoken")

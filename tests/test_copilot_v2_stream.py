@@ -161,7 +161,8 @@ def test_fastpath_answers_without_model(monkeypatch):
     lines, calls = asyncio.run(run_turn(req, script, monkeypatch))
     assert len(calls) == 0, "fast-path must not call the model"
     text = deltas(lines)
-    assert "رادار" in text and "80" in text
+    # the Emitter Egyptianizes every Arabic line: 80 → «تمانين»
+    assert "رادار" in text and "تمانين" in text and "80" not in text
     assert done(lines)["expects_reply"] is False
 
 
@@ -183,7 +184,7 @@ def test_tool_round_action_emitted_and_followup_spoken(monkeypatch):
     assert acts[0]["type"] == "switch_route"
     assert acts[0]["index"] == 1
     assert acts[0]["commit"] == "done"
-    assert "6" in deltas(lines)
+    assert "ست دقايق" in deltas(lines)        # «6 دقايق» → «ست دقايق»
     # second pass got the tool result + the language pin again
     sys_msgs = [m.get("content") or "" for m in calls[1]["messages"]
                 if m["role"] == "system"]
@@ -335,7 +336,9 @@ def test_unconfigured_backend_errors_cleanly(monkeypatch):
     req = FakeReq("hello")
     lines, _ = asyncio.run(run_turn(req, [[("end", None)]], monkeypatch,
                                     openai_key=""))
-    assert lines[0]["t"] == "error"
+    # language is resolved FIRST so even this error is localized
+    assert lines[0]["t"] == "meta" and lines[1]["t"] == "error"
+    assert "spoken" in lines[1]
 
 
 def test_where_parked_zooms_to_spot(monkeypatch):

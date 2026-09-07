@@ -20,7 +20,15 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "lead_details": {"en": "One sec, let me check…", "ar": "ثواني، بشوفلك…"},
     # Emitted when a turn produced no text at all.
     "fallback_ok":  {"en": "Okay.",                  "ar": "تمام."},
-    # Deterministic translation-pass preamble is never shown; kept for logs.
+    # Spoken by the client verbatim on an in-stream error — already in the
+    # resolved language, so an error can never be the wrong-language reply.
+    "err_spoken":   {"en": "Sorry, something went wrong. Try again.",
+                     "ar": "معلش، حصلت مشكلة. جرب تاني."},
+    "err_busy":     {"en": "One second, I'm a bit busy. Say that again?",
+                     "ar": "ثانية واحدة، مشغول شوية. قول تاني؟"},
+    "err_no_input": {"en": "I didn't catch that.", "ar": "مسمعتش. قول تاني؟"},
+    # A garbled / low-confidence transcript: confirm before acting.
+    "unclear_ask":  {"en": "Say that once more?", "ar": "معلش، قولها تاني؟"},
 }
 
 KEYS = frozenset(_STRINGS.keys())

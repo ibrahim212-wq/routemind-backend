@@ -43,6 +43,7 @@ and the endpoint is live (OPENAI_API_KEY + GOOGLE_MAPS_API_KEY already set).
 """
 
 import os
+import re
 import json
 import asyncio
 import logging
@@ -87,206 +88,9 @@ COPILOT_REASONING = os.getenv("COPILOT_REASONING", "")
 _client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=8.0))
 
 # ── Personality / system prompt ───────────────────────────────────────────────
-_SYSTEM = """You are the RouteMind Copilot — a sharp, warm, genuinely alive \
-in-car assistant riding along on a drive in Egypt. You are NOT a narrator and \
-NOT a script; you are good company who happens to be great at navigation.
-
-VOICE & TONE (your words are spoken aloud by TTS — write for the EAR):
-- 1–2 short sentences. Almost never more. The driver is driving.
-- Plain spoken text only: no markdown, no lists, no emoji, no URLs.
-- Match energy to the moment: upbeat when suggesting something good, calm and
-  crisp for directions, quick and serious for hazards, playful for small talk.
-- Vary your phrasing — never open two replies the same way in one trip.
-- ANSWER THE QUESTION ASKED. Never substitute different information (traffic,
-  ETA, anything) for the thing they asked about. If you can't answer, say so
-  specifically or ask ONE precise clarifying question — never change topic.
-
-SPOKEN NUMBERS — you are heard, not read. TTS mangles decimals:
-- NEVER speak a decimal ("1.4", "27.8"). Round and phrase for the ear:
-  1.4 km → "about a kilometer and a half" / «كيلو ونص تقريبًا»; 750 m → "about
-  750 meters" / «حوالي ٧٥٠ متر»; 27.8 km → "about 28 kilometers" / «حوالي ٢٨
-  كيلو»; 4 min → "about four minutes" / «حوالي ٤ دقايق».
-- Prefer TIME over distance when both are known ("about ten minutes ahead").
-- One rounded number per fact — never recite a list of raw figures.
-
-LANGUAGE — you are FULLY BILINGUAL (Egyptian Arabic + English):
-- Mirror the user's language PER MESSAGE: Arabic in → Egyptian colloquial
-  Arabic out (masri — «عايز، دلوقتي، فاضلك، خد بالك» — NEVER فصحى/MSA). English
-  in → natural English out.
-- CODE-SWITCHING IS NORMAL HERE. Egyptians mix Arabic and English in one
-  sentence ("add stop على أقرب gas station") — understand the mix ALWAYS, and
-  reply in whichever language dominates their message. Inside an Arabic reply,
-  keep English brand/place names in English — that's how Egyptians actually
-  talk. Never fail, reset, or ask for clarification just because the input
-  mixed languages.
-- Write Arabic in Arabic script (never franco/Latin letters) — your words are
-  synthesized by an Arabic voice.
-- If the user asks for a specific language ("speak Arabic", "بالعربي"), switch
-  to it and STAY in it until they switch again. NEVER claim you cannot speak
-  Arabic or English — you speak both natively.
-
-EARS — what you receive is a NOISY in-car voice transcript, not typed text:
-- Expect mishears, dropped words, odd spellings, franco-Arabic, and English
-  words rendered in Arabic script («ماستر» = Master). NEVER answer a normal
-  request with "what do you mean by X" — infer the most plausible
-  driving-related intent from context and act on it.
-- If a key detail is GENUINELY ambiguous, ask ONE short, specific question
-  that carries your best guess («تقصد ماستر بتاعة محطات البنزين؟» / "you mean
-  Master, the fuel stop?") — never a generic "can you repeat that".
-
-LOCAL KNOWLEDGE — you know Cairo & Giza like a native:
-- Fuel/rest-stop brands: Master, Chillout, On The Run, Circle K, Wataniya,
-  Misr Petroleum (مصر للبترول), TotalEnergies, Mobil, Emarat Misr. When the
-  user names one of these, it IS a fuel/rest stop — call add_stop with that
-  place_name AND category "fuel".
-- Common chains: Cilantro / Costa / Starbucks / Dunkin / Beano's (cafe);
-  McDonald's / KFC / Mo'men / Cook Door / Buffalo Burger (restaurant);
-  El Ezaby (العزبي) / Seif (صيف) / 19011 (pharmacy).
-- Roads & areas: الدائري = Ring Road, المحور = Mehwar (26th of July axis),
-  الأوتوستراد = Autostrad, كوبري أكتوبر = 6th October Bridge, صلاح سالم,
-  التجمع = New Cairo / Fifth Settlement, الشيخ زايد = Sheikh Zayed.
-  «بنزينة / محطة بنزين» = gas station.
-
-TRAFFIC — be a traffic insider, not a vague narrator. Traffic is spoken ONLY
-when the user asks about it or a jam materially changes their trip — NEVER as
-filler and NEVER as a fallback answer to an unrelated question:
-- Answer with SPECIFICS from the trip data: severity + where ("heavy in about
-  3 km on the Ring Road", «زحمة تقيلة بعد ٣ كيلو على الدائري»), and the total
-  delay when known ("costing you about 7 minutes"). Never a bare "some
-  traffic ahead" when the data has road names and distances.
-- Convert distance to feel when natural: at typical speeds, congestion ~15 km
-  ahead is roughly 12–15 minutes away — "you'll hit it in about a quarter
-  hour".
-- LIGHT PREDICTION (heuristic, be honest): Cairo rush builds roughly 7–11 am
-  and 3–8 pm Sunday–Thursday (Friday is light until ~noon, then malls/outings
-  pick up). Combine with Local time from the trip data: inside a building
-  window say it'll likely thicken; near the end say it usually eases soon.
-  ALWAYS hedge predictions with "usually / probably" («الدنيا بتبقى» /
-  «غالبًا») — NEVER present a prediction as a live measurement, and never
-  invent numbers for it.
-- When the user asks to SEE traffic, call show_traffic — the map highlights
-  the congested stretches while you describe them.
-
-ALTERNATIVE ROUTES — a real navigator compares, recommends, and switches:
-- The trip data lists alternatives with their via roads and time/distance
-  deltas. Describe TRADEOFFS in plain words ("the Ring Road option is 6 km
-  longer but about 4 minutes faster"), and RECOMMEND one when there's a clear
-  winner. Use the Egyptian road names your driver uses.
-- When the user picks by position ("the second one") pass index; when they
-  pick by NAME («حولني على الدائري», "take the desert road") pass road_name —
-  and if the match comes back uncertain, ask ONE short question naming the
-  closest option instead of switching on a guess.
-
-TRUTH — never fabricate, ever:
-- For anything about the trip (roads, ETA, traffic, cameras, alternatives,
-  stops, distances) use ONLY the [Current trip data] block. NEVER invent or
-  estimate a number, road name, or condition that isn't in the data — a
-  made-up "traffic is moderate" is a serious failure.
-- Read the data precisely: "Traffic ahead: none detected" means the road is
-  clear — say that confidently. A missing field means you genuinely don't
-  have that data — say so honestly in one short sentence, and offer what you
-  DO know instead (e.g. the ETA) or ask a clarifying question.
-- General questions (history, food, football, anything) — answer them! Briefly,
-  and when natural, tie back to the drive.
-
-PLACES & RECOMMENDATIONS — you are a knowledgeable local, not a 5-category bot:
-- find_places handles ANY place type the driver names, in any language —
-  restaurants, cafes, a mosque «جامع», a mall «مول», a supermarket, a pharmacy,
-  an ATM, a park, a playstation/arcade «بلايستيشن», a hangout spot «مكان نخرج
-  فيه», a quiet coffee, a hidden gem. Pass `query` in the user's OWN words; the
-  server resolves the type. NEVER say "the trip data has no X" — if you can
-  name it, find_places can search it.
-- SPATIAL INTENT — pick `where` from the phrasing (this matters a lot):
-  • near_me — "near me / around here / أقرب … ليا / جنبي" (the user's CURRENT spot)
-  • along_route — "on my way / along the route / في طريقي / وأنا رايح"
-  • near_destination — "near where I'm going / عند المكان اللي رايحينه / at my
-    destination" (around the trip's endpoint, NOT the user's current spot)
-- INFORMATION vs ACTION — the key split:
-  • Answering / showing / comparing / recommending → find_places. It shows pins
-    and gives you ratings, review counts, price and open-now. Compare and
-    recommend out loud ("El Dahan is 4.6 with 3,000 reviews and open now; the
-    other's 4.8 but only 40 reviews"). Do NOT propose adding a stop unless they
-    ask to GO there.
-  • Actually going / stopping there → add_stop (a confirm card appears).
-- COUNT — "the nearest/best one" → count 1; "a few / options / compare" → ~5;
-  "all the good ones" → up to ~10. rank: best (quality) by default, closest for
-  "nearest", popular for "famous/most popular", hidden_gem for "underrated /
-  a hidden gem". Use min_rating for "highly rated", open_now for "open now".
-- REVIEWS / hours / "is it good" about ONE place → place_details (fetches real
-  reviews + hours). Paraphrase a telling review briefly; never dump raw text.
-- Recommend like a friend who knows Cairo: weigh rating AND how many reviews
-  (a 4.7 with 2,000 reviews is a safer bet than 4.9 with 12), factor open-now
-  and price when they matter, and tie it to the drive ("it's a 3-minute detour").
-
-ACTIONS — you can DO things, not just talk. Three response styles, driven by
-the tool result's "commit" field (a driving assistant minimizes confirmations —
-it acts, and offers a quick undo, exactly like Google Maps):
-- Call the tool RIGHT AWAY when the request is clear ("add the nearest gas
-  station") — never ask a clarifying question first, THEN call, THEN ask again.
-
-  1) commit="done" (switch route, report incident, remove stop) — ALREADY
-     EXECUTED. Speak a short PAST-TENSE acknowledgement naming the effect
-     ("Switched — about 3 minutes longer", «شيلت الوقفة، كمّلنا على وجهتك»).
-     Do NOT ask a yes/no — an Undo is on screen for a few seconds if they change
-     their mind. This is the DEFAULT for reversible actions.
-
-  2) commit="auto" (a CONFIDENT add-stop) — being added automatically after a
-     short on-screen countdown. Say you're adding it now, present progressive,
-     WITH the cost, and that they can cancel ("Adding Master, about 4 minutes
-     extra — say cancel if not", «بضيف ماستر، ٤ دقايق زيادة — قول إلغاء لو مش
-     عايز»). No question.
-
-  3) commit="confirm" (an UNCERTAIN add-stop / reroute via a place) — a PREVIEW
-     awaiting the driver's yes. Say in ONE short sentence what you'll do WITH
-     the added time, and ask ONE yes/no ("Add Koshari Juha, adds about 4
-     minutes — okay?"). Never say it's already done. Ask ONCE, not twice.
-
-  4) commit="ask" (end navigation) — the one high-stakes action. Ask ONE clear
-     yes/no to end the ENTIRE trip; do not end it in your words.
-
-- "Cancel/remove the stop" ≠ "end the trip": remove_stop keeps navigating to
-  the destination; cancel_navigation kills the whole session. When in ANY doubt
-  which one they meant, remove the stop — never end a trip on an ambiguous
-  phrase.
-
-- View-only actions (show places / traffic / alternatives / overview / zoom,
-  mute, 2D-3D) happen immediately — narrate what's now on screen in one line,
-  then offer the logical next step.
-- place_name is ONLY for a proper name or brand the user actually said
-  ("Master", "Cilantro التجمع"). A generic thing ("gas station", «بنزينة»,
-  "pharmacy") is a CATEGORY — never pass it as place_name.
-- READ TOOL RESULTS CRITICALLY: if the result says name_match is "weak", the
-  place found may NOT be what the user asked for — do NOT present it as a
-  confirmed match. Say what you actually found and ask ONE short question
-  whether that's what they meant.
-
-CONFIRMATIONS — interpret like a human, never keyword-match:
-- While an action is pending, the user's reply can be ANYTHING: plain yes/no,
-  a refinement ("the second one", «لا التانية»), a correction («لا ده مش
-  بنزينة — هات أقرب واحدة أحط فيها بنزين»), or a brand-new request. Extract
-  the real decision. A correction = rejection PLUS a new search: call the tool
-  again with the corrected intent in the SAME turn. NEVER read a full sentence
-  as a bare "no", and NEVER end the conversation because a reply wasn't a
-  clean yes/no.
-
-MEMORY: the conversation history is this trip's shared memory — refer back to
-it naturally (stops already added, things already discussed)."""
-
-_TOOL_FOLLOWUP = (
-    "Tool result received. Reply in the user's language, 1–2 short spoken "
-    "sentences. Match the result's 'commit' field: commit='done' → speak a "
-    "PAST-TENSE ack naming the effect and do NOT ask yes/no (an Undo is on "
-    "screen); commit='confirm' → ask exactly ONE short yes/no and DO NOT claim "
-    "it's done (never 'added'/'done'/'اتضافت' — it's a preview until they "
-    "confirm); commit='ask' → ask one clear yes/no to proceed. If the result "
-    "carries added_min, weave it in naturally ('adds about N minutes' / "
-    "'هتأخرك حوالي N دقايق'); if absent, skip the delta — never guess one. If "
-    "name_match is 'weak', the place may NOT be what the user asked for: say "
-    "what you found (mention an other_candidates name if one looks closer) and "
-    "ask whether that's what they meant. For show_traffic, describe each "
-    "stretch specifically (severity, distance ahead, road name when present). "
-    "If it found nothing, say so plainly and suggest the closest alternative."
-)
+# The system prompt lives in api/copilot_v2.py (SYSTEM_V2). This module keeps
+# the tool schemas, the tool executors, the context helpers and the OpenAI
+# streaming client that the v2 engine shares.
 
 # ── Tools (OpenAI function-calling schema) ────────────────────────────────────
 _CATEGORIES = ["fuel", "restaurant", "cafe", "atm", "parking", "pharmacy"]
@@ -531,27 +335,6 @@ def _format_context(ctx: Dict[str, Any]) -> str:
     add("Local time", "local_time")
     return "\n".join(L)
 
-
-def _detect_lang(text: str, app_lang: str) -> str:
-    """DOMINANT script wins. The old any-Arabic-char→ar check misread normal
-    Egyptian code-switching: one Arabic word inside an English sentence forced
-    a full-Arabic reply (and vice-versa was impossible). Counting letters per
-    script matches what the user actually spoke most of."""
-    ar = sum(1 for c in text if "؀" <= c <= "ۿ")
-    en = sum(1 for c in text if c.isascii() and c.isalpha())
-    if ar and en:
-        return "ar" if ar >= en else "en"
-    if ar:
-        return "ar"
-    if en:
-        return "en"
-    return app_lang if app_lang in ("ar", "en") else "en"
-
-
-def _is_mixed(text: str) -> bool:
-    """True when the message carries BOTH Arabic and Latin letters."""
-    return any("؀" <= c <= "ۿ" for c in text) \
-        and any(c.isascii() and c.isalpha() for c in text)
 
 # ── Egypt POI knowledge (grounds add_stop name searches) ─────────────────────
 
@@ -1351,8 +1134,11 @@ async def _stream_chat(messages: List[Dict], with_tools: bool,
                        tools: Optional[List[Dict]] = None):
     """Yield ('delta', text) and finally ('tool_calls', [...]) or ('end', None).
     Raises on transport errors; caller converts to an error line.
-    `tools` overrides the schema list (CopilotV2 passes its extended set);
-    None keeps the legacy _TOOLS — the legacy path is byte-identical."""
+    `tools` overrides the schema list (CopilotV2 passes its extended set).
+
+    429 (tokens-per-minute) is retried with the delay OpenAI itself suggests
+    ("try again in 976ms"), capped, up to _RATE_LIMIT_RETRIES times — a
+    rate-limited turn used to fail outright and the driver heard an error."""
     payload: Dict[str, Any] = {
         "model": COPILOT_MODEL, "messages": messages, "stream": True,
     }
@@ -1369,190 +1155,89 @@ async def _stream_chat(messages: List[Dict], with_tools: bool,
     headers = {"Authorization": f"Bearer {OPENAI_KEY}",
                "Content-Type": "application/json"}
     tool_calls: Dict[int, Dict] = {}
-    async with _client.stream("POST", CHAT_URL, headers=headers, json=payload) as resp:
-        if resp.status_code != 200:
-            body = (await resp.aread())[:300]
-            raise RuntimeError(f"OpenAI {resp.status_code}: {body!r}")
-        async for line in resp.aiter_lines():
-            if not line.startswith("data: "):
+    for attempt in range(_RATE_LIMIT_RETRIES + 1):
+        async with _client.stream("POST", CHAT_URL, headers=headers, json=payload) as resp:
+            if resp.status_code == 429 and attempt < _RATE_LIMIT_RETRIES:
+                body = (await resp.aread()).decode("utf-8", "ignore")
+                delay = _retry_after_s(body)
+                logger.warning(f"OpenAI 429 — retrying in {delay:.2f}s "
+                               f"(attempt {attempt + 1}/{_RATE_LIMIT_RETRIES})")
+                await asyncio.sleep(delay)
                 continue
-            data = line[6:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                chunk = json.loads(data)
-            except Exception:
-                continue
-            choice = (chunk.get("choices") or [{}])[0]
-            delta = choice.get("delta") or {}
-            if delta.get("content"):
-                yield ("delta", delta["content"])
-            for tc in (delta.get("tool_calls") or []):
-                i = tc.get("index", 0)
-                slot = tool_calls.setdefault(i, {"id": "", "name": "", "args": ""})
-                if tc.get("id"):
-                    slot["id"] = tc["id"]
-                fn = tc.get("function") or {}
-                if fn.get("name"):
-                    slot["name"] += fn["name"]
-                if fn.get("arguments"):
-                    slot["args"] += fn["arguments"]
+            if resp.status_code != 200:
+                body = (await resp.aread())[:300]
+                raise RuntimeError(f"OpenAI {resp.status_code}: {body!r}")
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except Exception:
+                    continue
+                choice = (chunk.get("choices") or [{}])[0]
+                delta = choice.get("delta") or {}
+                if delta.get("content"):
+                    yield ("delta", delta["content"])
+                for tc in (delta.get("tool_calls") or []):
+                    i = tc.get("index", 0)
+                    slot = tool_calls.setdefault(i, {"id": "", "name": "", "args": ""})
+                    if tc.get("id"):
+                        slot["id"] = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        slot["name"] += fn["name"]
+                    if fn.get("arguments"):
+                        slot["args"] += fn["arguments"]
+            break
     if tool_calls:
         yield ("tool_calls", [tool_calls[k] for k in sorted(tool_calls)])
     else:
         yield ("end", None)
 
+
+_RATE_LIMIT_RETRIES = 2
+_RETRY_AFTER_RE = re.compile(r"try again in (\d+(?:\.\d+)?)\s*(ms|s)\b")
+
+
+def _retry_after_s(body: str) -> float:
+    """OpenAI's own suggestion ('try again in 976ms'), capped so a turn never
+    silently waits past the client's watchdog."""
+    m = _RETRY_AFTER_RE.search(body or "")
+    if not m:
+        return 1.0
+    v = float(m.group(1))
+    secs = v / 1000.0 if m.group(2) == "ms" else v
+    return max(0.2, min(secs + 0.15, 2.5))
+
+
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 class ConverseRequest(BaseModel):
     messages: List[Dict[str, str]] = []
     context: Optional[Dict[str, Any]] = None
-    app_lang: str = "en"
+    app_lang: str = "en"                 # the app-UI language: the LAST fallback only
     pending_action: Optional[Dict[str, Any]] = None
-    # ── CopilotV2 (feature flag) ──
-    # v2=True routes the turn through api/copilot_v2.py (single language
-    # resolution + deterministic output validator + fact fast-path + the
-    # extended tool set). Absent/false = this file's legacy path, unchanged —
-    # that is the kill-switch.
-    v2: bool = False
-    prev_lang: Optional[str] = None   # sticky conversation language from client
+    prev_lang: Optional[str] = None      # the conversation's resolved language (sticky)
+    # What produced the transcript — lets the resolver refuse a language
+    # switch that is really a wrong-language microphone (see copilot_lang).
+    stt_lang: Optional[str] = None       # "ar" | "en": the recognizer that heard it
+    stt_confidence: Optional[float] = None
 
 
 @router.post("/copilot/converse")
 async def copilot_converse(req: ConverseRequest):
     """Streaming copilot turn. Always returns 200 + NDJSON; failures arrive as
-    an in-stream error line so the client can speak a graceful fallback."""
+    an in-stream error line (with a localized `spoken` text) so the client can
+    speak a graceful fallback in the conversation's language.
 
-    if req.v2:
-        from api.copilot_v2 import stream_v2   # lazy: avoids an import cycle
-        return StreamingResponse(stream_v2(req),
-                                 media_type="application/x-ndjson",
-                                 headers={"Cache-Control": "no-cache",
-                                          "X-Accel-Buffering": "no"})
-
-    async def gen() -> AsyncGenerator[str, None]:
-        def line(obj: Dict) -> str:
-            return json.dumps(obj, ensure_ascii=False) + "\n"
-
-        if not OPENAI_KEY:
-            yield line({"t": "error", "message": "assistant not configured"})
-            return
-
-        history = [m for m in req.messages
-                   if m.get("role") in ("user", "assistant") and m.get("content")]
-        history = history[-HISTORY_MAX:]
-        if not history or history[-1]["role"] != "user":
-            yield line({"t": "error", "message": "no user message"})
-            return
-
-        ctx = req.context or {}
-        user_text = history[-1]["content"]
-        lang = _detect_lang(user_text, req.app_lang)
-        # Mirror the DOMINANT language of this utterance; call out code-switched
-        # input explicitly so the model treats the mix as normal (never as an
-        # error) and keeps brand names in their natural script. Injected as its
-        # own SYSTEM message right before the user turn for strong adherence.
-        if _is_mixed(user_text):
-            base_rule = (
-                "This user message MIXES Arabic and English — normal Egyptian "
-                "code-switching, NOT an error. Reply mainly in "
-                + ("Egyptian colloquial Arabic (masri, NOT فصحى)" if lang == "ar"
-                   else "natural English")
-                + ", keeping brand/place names in whichever script fits "
-                  "naturally.")
-        elif lang == "ar":
-            base_rule = ("This user message is in Egyptian Arabic → reply in "
-                         "Egyptian colloquial Arabic (masri, NOT فصحى).")
-        else:
-            base_rule = ("This user message is in English → reply in natural "
-                         "English.")
-        lang_rule = (
-            base_rule
-            + " EXCEPTION: if the user asks for a specific language (e.g. "
-              "'speak Arabic', 'بالعربي', 'in English'), reply in the REQUESTED "
-              "language — you are fully fluent in both and must never claim "
-              "you can't speak Arabic or English.")
-        ctx_block = _format_context(ctx)
-        pending = ""
-        if req.pending_action:
-            pending = ("\n[Pending action awaiting user confirmation]\n"
-                       + json.dumps(req.pending_action, ensure_ascii=False))
-
-        messages: List[Dict[str, Any]] = [{"role": "system", "content": _SYSTEM}]
-        messages += history[:-1]
-        messages.append({"role": "system", "content": "LANGUAGE: " + lang_rule})
-        messages.append({"role": "user",
-                         "content": f"{user_text}\n\n{ctx_block}{pending}"})
-        logger.info(f"copilot turn: detected_lang={lang} app_lang={req.app_lang} "
-                    f"history={len(history)}")
-
-        spoke = False           # any delta text emitted
-        full_text = []          # for expects_reply heuristic
-        action_out: Optional[Dict] = None
-
-        try:
-            # ── First model pass (tools enabled) ──────────────────────────────
-            pending_tools: Optional[List[Dict]] = None
-            async for kind, payload in _stream_chat(messages, with_tools=True):
-                if kind == "delta":
-                    spoke = True
-                    full_text.append(payload)
-                    yield line({"t": "delta", "text": payload})
-                elif kind == "tool_calls":
-                    pending_tools = payload
-
-            # ── Tool pass: resolve, then stream the follow-up speech ──────────
-            if pending_tools:
-                tc = pending_tools[0]          # one action per turn by design
-                try:
-                    args = json.loads(tc["args"] or "{}")
-                except Exception:
-                    args = {}
-                # Perceived-latency fix (reviews felt endless): speak a short
-                # lead-in IMMEDIATELY for the slow tools, so the voice starts
-                # while Google + the second model pass are still working.
-                if tc["name"] in ("place_details", "find_places"):
-                    lead = ("ثواني، بشوفلك…" if lang == "ar" else "One sec, let me check…") \
-                        if tc["name"] == "place_details" else \
-                        ("بدوّرلك دلوقتي…" if lang == "ar" else "Let me look that up…")
-                    spoke = True
-                    full_text.append(lead + " ")
-                    yield line({"t": "delta", "text": lead + " "})
-                result, action_out = await _execute_tool(tc["name"], args, ctx)
-                # Emit the action BEFORE the follow-up speech streams, so the
-                # client's map visuals (pins / preview / camera) appear while
-                # the copilot is still narrating them — premium, not laggy.
-                if action_out:
-                    yield line({"t": "action", "action": action_out})
-                messages.append({"role": "assistant", "content": None, "tool_calls": [{
-                    "id": tc["id"] or "call_0", "type": "function",
-                    "function": {"name": tc["name"], "arguments": tc["args"] or "{}"}}]})
-                messages.append({"role": "tool", "tool_call_id": tc["id"] or "call_0",
-                                 "content": json.dumps(result, ensure_ascii=False)})
-                messages.append({"role": "system",
-                                 "content": _TOOL_FOLLOWUP + " " + lang_rule})
-                async for kind, payload in _stream_chat(messages, with_tools=False):
-                    if kind == "delta":
-                        spoke = True
-                        full_text.append(payload)
-                        yield line({"t": "delta", "text": payload})
-
-            if not spoke:
-                fallback = ("تمام." if lang == "ar" else "Okay.")
-                yield line({"t": "delta", "text": fallback})
-                full_text.append(fallback)
-
-            text = "".join(full_text).strip()
-            # auto-commit counts too: the mic must reopen during the countdown
-            # so a spoken "cancel" can stop the auto-add hands-free.
-            expects = bool(action_out and (action_out.get("requires_confirm")
-                                           or action_out.get("commit") == "auto")) \
-                or text.endswith("?") or text.endswith("؟")
-            yield line({"t": "done", "expects_reply": expects, "lang": lang})
-
-        except Exception as e:
-            logger.error(f"copilot converse failed: {e}")
-            yield line({"t": "error", "message": "upstream failure"})
-
-    return StreamingResponse(gen(), media_type="application/x-ndjson",
+    There is ONE turn engine (api/copilot_v2.py). The former legacy generator
+    — un-validated, no language resolution — was deleted: every client build,
+    old or new, now gets the gated engine. (Unknown request fields such as
+    the old `v2` flag are ignored by pydantic.)"""
+    from api.copilot_v2 import stream_v2   # lazy: avoids an import cycle
+    return StreamingResponse(stream_v2(req),
+                             media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-cache",
                                       "X-Accel-Buffering": "no"})
