@@ -465,7 +465,9 @@ def test_refused_switch_confirms_instead_of_guessing(monkeypatch):
 
 
 def test_report_incident_previews_and_needs_yes(monkeypatch):
-    req = FakeReq("فيه حادثة قدامي", ctx={"eta_min": 5}, prev_lang="ar")
+    # (a QUESTION about hazards is now answered by the fast-path; this is the
+    # explicit report — the only thing that may reach the tool)
+    req = FakeReq("بلغ عن حادثة هنا", ctx={"eta_min": 5}, prev_lang="ar")
     script = [
         [("tool_calls", [{"id": "c1", "name": "report_incident",
                           "args": '{"kind": "accident"}'}])],
@@ -497,3 +499,34 @@ def test_call_place_previews_and_needs_yes(monkeypatch):
     assert len(acts) == 1 and acts[0]["type"] == "dial"
     assert acts[0]["requires_confirm"] is True and acts[0]["commit"] == "confirm"
     assert acts[0]["place"] == "Master Gas"
+
+
+def test_thanks_is_answered_from_the_catalog_in_the_pinned_language(monkeypatch):
+    req = FakeReq("thanks", ctx={"eta_min": 5})
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "MODEL MUST NOT RUN")]], monkeypatch))
+    assert calls == [] and deltas(lines).strip() == "Anytime."
+    req = FakeReq("تسلم", ctx={"eta_min": 5}, prev_lang="ar")
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "MODEL MUST NOT RUN")]], monkeypatch))
+    assert calls == [] and deltas(lines).strip() == "العفو، أي خدمة."
+
+
+def test_wrong_script_one_word_reply_cannot_reach_the_client(monkeypatch):
+    async def fake_translate(text, lang):
+        return "Okay."
+    monkeypatch.setattr(v2, "_translate", fake_translate)
+    req = FakeReq("sure", ctx={"eta_min": 5})
+    lines, calls = asyncio.run(run_turn(req, [[("delta", "تمام. ")]], monkeypatch))
+    assert lines[0]["lang"] == "en"
+    assert "تمام" not in deltas(lines) and deltas(lines).strip() == "Okay."
+
+
+def test_add_stop_with_no_category_asks(monkeypatch):
+    req = FakeReq("add a stop", ctx={"user_lat": 30.0, "user_lng": 31.2})
+    script = [
+        [("tool_calls", [{"id": "c1", "name": "add_stop", "args": '{"query": "stop"}'}])],
+        [("delta", "A stop where — gas, pharmacy or food? ")],
+    ]
+    lines, calls = asyncio.run(run_turn(req, script, monkeypatch))
+    assert actions(lines) == []
+    tool_msgs = [m for m in calls[1]["messages"] if m["role"] == "tool"]
+    assert "no_category" in tool_msgs[-1]["content"]

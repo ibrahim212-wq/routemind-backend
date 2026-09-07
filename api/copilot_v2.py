@@ -49,7 +49,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from api.copilot_lang import (resolve_language, reply_lang_ok, split_sentences)
-from api.copilot_fastpath import try_fastpath, match_action
+from api.copilot_fastpath import try_fastpath, match_action, match_ack
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
 
@@ -120,6 +120,9 @@ TRUTH — the live trip data ALWAYS wins:
   trip data is right. A missing field means you genuinely don't have it: say
   so honestly in one short sentence and offer what you DO know.
 - "Traffic ahead: none detected" means the road is clear — say it confidently.
+- INCIDENTS (accident, police, hazard, closure): you know one only if the
+  trip data lists it — it never does today. Heavy traffic is NOT an accident:
+  say you don't see an accident in the trip data, then give the traffic.
 - You have NO road-closure data and NO weather. Never say a road is "open"
   or "closed"; never describe the sky, sunset or temperature. For "is X
   open?" say what the router offers («فيه طريق عن طريق الدائري أسرع بأربع
@@ -1249,6 +1252,14 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         logger.info(f"copilot v2 fastpath action {action['type']}")
         yield em.action(action)
         for l in await em.delta(S(key, lang)):
+            yield l
+        yield em.done(False)
+        return
+
+    # ── Gratitude needs no model ─────────────────────────────────────────────
+    ak = None if req.pending_action else match_ack(user_text)
+    if ak:
+        for l in await em.delta(S(ak, lang)):
             yield l
         yield em.done(False)
         return

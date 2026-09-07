@@ -757,6 +757,20 @@ async def _resolve_place(ctx: Dict[str, Any], query: str) -> Optional[Dict]:
     return places[0] if places else None
 
 
+_MAX_STOP_DETOUR_MIN = 120      # beyond this a "stop" is a different trip
+_MAX_STOP_DISTANCE_KM = 80
+_LITERAL_STOP = {"stop", "a stop", "the stop", "stops", "new stop", "a new stop",
+                 "وقفه", "وقفة", "الوقفه", "الوقفة", "وقفه جديده", "وقفة جديدة",
+                 "محطه", "محطة", "استوب", "ستوب", "وقوف"}
+
+
+def _is_literal_stop(s: str) -> bool:
+    t = (s or "").strip().lower()
+    for a, b in (("أ", "ا"), ("إ", "ا"), ("آ", "ا"), ("ة", "ه"), ("ى", "ي"), ("ـ", "")):
+        t = t.replace(a, b)
+    return t in _LITERAL_STOP
+
+
 async def _detour_added_min(ctx: Dict[str, Any], stop_lat: float,
                             stop_lng: float) -> Optional[int]:
     """Real detour cost of visiting a stop: (current→stop→dest) minus
@@ -893,6 +907,13 @@ async def _execute_tool(name: str, args: Dict[str, Any],
             query = (args.get("query") or "").strip()
             where = args.get("where") or "along_route"
             nearest = where == "near_me"
+            # Guardrail 0 — "add a stop" / «ضيف وقفة» carries no place and no
+            # category. Searching the literal word found "stop and shop" and a
+            # "Waqfa Cafe" in Saudi Arabia (2026-09 probe). Ask instead.
+            if _is_literal_stop(qname) or _is_literal_stop(query) or not (qname or query):
+                return {"found": False, "no_category": True,
+                        "note": "No place or category was given. Ask ONE short "
+                                "question: a stop where — gas, pharmacy, food?"}, None
             # Guardrail 1 — a generic phrase passed as place_name ("gas
             # station", «بنزينة») is really a category query, not a proper name.
             if qname and _category_for_place_name(qname):
@@ -931,6 +952,15 @@ async def _execute_tool(name: str, args: Dict[str, Any],
                                     "inventing a match.")
                 return miss, None
             added = await _detour_added_min(ctx, place["lat"], place["lng"])
+            # Guardrail 3 — a match that is nowhere near this trip (the text
+            # search is biased, not bounded) is not a stop: say so, don't
+            # preview a +3177-minute detour.
+            far_km = (place.get("distance_m") or 0) / 1000.0
+            if (added is not None and added > _MAX_STOP_DETOUR_MIN) or far_km > _MAX_STOP_DISTANCE_KM:
+                return {"found": False, "requested": qname or query, "too_far": True,
+                        "note": "The only match is far outside this trip — say it "
+                                "isn't on the way and ask for a closer type or "
+                                "place. Never invent a nearer one."}, None
             # CONFIDENCE POLICY (approved direction — Google auto-adds a clearly
             # requested stop after a short cancellable countdown):
             #   AUTO  = explicit+specific request (proper name or clean type),

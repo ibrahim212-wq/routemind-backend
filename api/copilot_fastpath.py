@@ -84,6 +84,11 @@ _INTENTS = [
         r"(فاضل|باقي|باقى|فاضلي|فاضللي) (كام|قد ايه|اد ايه)(?! (كيلو|كم))",
         r"(كام|قد ايه) (فاضل|باقي|باقى)(?! (كيلو|كم))",
         r"الوقت (المتبقي|المتبقى|الباقي|الباقى)")),
+    ("incident_ahead", _rx(
+        r"(is there|any|see|got) (an |a )?(accident|crash|collision|police|checkpoint|hazard|incident)",
+        r"(accident|crash|police|checkpoint|hazard) (ahead|up ahead|on the road|on my way)",
+        r"(فيه|في|فى) (حادثة|حادثه|حوادث|كمين|كمائن|لجنة|لجنه|خطر)",
+        r"(حادثة|حادثه|كمين|لجنة|لجنه) (قدامي|قدامى|قدام|على الطريق|في الطريق|فى الطريق)")),
     ("distance_remaining", _rx(
         r"how far( left| to go| is it| remaining)?\??$",
         r"(distance|km|kilometers) (left|remaining|to go)",
@@ -268,6 +273,29 @@ def answer(intent: str, ctx: Dict[str, Any], lang: str) -> Optional[str]:
             s += f", arriving around {_clock12(clock)}"
         return s + "."
 
+    if intent == "incident_ahead":
+        # The trip data carries traffic, cameras and bridges — never incident
+        # reports. Heavy traffic is NOT an accident (the model said «فيه حادثة
+        # تقيلة» in the 2026-09 probe). Honest, deterministic.
+        segs = ctx.get("traffic_segments") or []
+        heavy = next((sg for sg in segs if isinstance(sg, dict)
+                      and str(sg.get("level", "")).lower() in ("heavy", "severe", "jam")), None)
+        if ar:
+            s = "مش شايف حوادث ولا كمائن في بيانات الرحلة"
+            if heavy:
+                d = speak_distance(float(heavy["distance_ahead_km"]), lang) \
+                    if heavy.get("distance_ahead_km") is not None else None
+                s += "، بس فيه زحمة تقيلة" + (f" بعد {d}" if d else "") + \
+                     (f" على {heavy['road']}" if heavy.get("road") else "")
+            return s + "."
+        s = "I don't see any incidents in the trip data"
+        if heavy:
+            d = speak_distance(float(heavy["distance_ahead_km"]), lang) \
+                if heavy.get("distance_ahead_km") is not None else None
+            s += ", but there's heavy traffic" + (f" in about {d}" if d else "") + \
+                 (f" on {heavy['road']}" if heavy.get("road") else "")
+        return s + "."
+
     if intent == "distance_remaining":
         km = ctx.get("remaining_km", ctx.get("remaining_distance_km"))
         if km is None:
@@ -328,3 +356,21 @@ def match_action(text: str):
         return None
     hits = [(k, dict(a)) for k, a, rxs in _ACTION_FAST if any(r.search(t) for r in rxs)]
     return hits[0] if len(hits) == 1 else None
+
+
+# A throwaway turn that needs no model: gratitude. (A bare "yes"/"ok" is NOT
+# here — it may answer a question the assistant just asked.)
+_THANKS = _rx(r"^(thanks|thank you|thank u|thx|ty|cheers|thanks a lot|thank you so much|"
+              r"thanks man|thanks bro|great thanks|ok thanks|okay thanks|perfect thanks)$",
+              r"^(شكرا|شكراً|شكرًا|متشكر|متشكره|متشكرة|تسلم|تسلمي|تسلم ايدك|تسلم إيدك|"
+              r"ميرسي|مرسي|الله يخليك|ربنا يخليك|شكرا جدا|شكرا ليك|تمام شكرا|ماشي شكرا)$")
+
+
+def match_ack(text: str):
+    """'ack_thanks' for a pure thank-you, else None."""
+    t = (text or "").lower()
+    t = _POLITE.sub(" ", t)
+    t = _TRAIL_PUNCT.sub("", " ".join(t.split())).strip()
+    if not t or len(t.split()) > 4:
+        return None
+    return "ack_thanks" if any(r.search(t) for r in _THANKS) else None

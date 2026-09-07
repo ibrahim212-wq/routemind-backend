@@ -401,3 +401,21 @@ def test_speak_distance_no_decimals_spoken():
             assert s is not None
             # the only digits allowed are integers (no "1.4"-style decimals)
             assert not re.search(r"\d+\.\d", s), f"{km} {lang} → {s}"
+
+
+# ── 2026-09 closeout: the short-chunk hole ───────────────────────────────────
+@pytest.mark.parametrize("text,lang", [
+    ("تمام.", "en"), ("حاضر", "en"), ("العفو.", "en"), ("sure", "ar"), ("yes.", "ar"),
+    ("thanks!", "ar"), ("Sure thing.", "ar"), ("no problem", "ar"),
+])
+def test_wrong_script_short_reply_is_not_a_name(text, lang):
+    assert not reply_lang_ok(text, lang)
+
+
+@pytest.mark.parametrize("text,lang", [
+    ("Master.", "ar"), ("KFC?", "ar"), ("Ring Road.", "ar"), ("On The Run", "ar"),
+    ("Master.", "en"), ("Cilantro التجمع", "en"), ("Cilantro التجمع", "ar"), ("19011", "en"),
+    ("تمام.", "ar"), ("Okay.", "en"), ("Okay.", "ar"),   # ok/okay are loans in Cairo
+])
+def test_names_and_right_script_short_replies_still_pass(text, lang):
+    assert reply_lang_ok(text, lang)

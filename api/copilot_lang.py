@@ -470,12 +470,40 @@ def _name_like(text: str) -> bool:
     return True
 
 
+_LATIN_WORD = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
+
+
+def _latin_name_only(text: str) -> bool:
+    """A short all-Latin chunk that is a brand/proper name, not English prose:
+    ≤4 words, each Capitalized, ALL-CAPS, a known borrowed token or a number.
+    "Master.", "KFC?", "Ring Road", "On The Run" pass; "okay.", "sure",
+    "thanks" do not."""
+    words = _LATIN_WORD.findall(text)
+    if not words or len(words) > 4:
+        return False
+    borrowed = set(_BORROWED_LATIN)
+    for w in words:
+        core = w.strip(".,!?'’-")
+        if not core:
+            continue
+        if core[0].isupper() or core.lower() in borrowed:
+            continue
+        return False
+    return True
+
+
 def reply_lang_ok(text: str, lang: str, threshold: float = 0.5) -> bool:
     """True when the reply text matches the resolved language."""
     if not text or not text.strip():
         return True
     if reply_lang_ratio(text, lang) >= threshold:
         return True
+    # A chunk with NO letter of the target script is a wrong-language reply,
+    # not a name («تمام.» on an English turn, "okay." on an Arabic turn) —
+    # the only exemption is a Latin brand/proper name inside an Arabic turn.
+    ar, en = script_counts(text)
+    if (ar if lang == "ar" else en) == 0:
+        return lang == "ar" and _latin_name_only(text)
     return _name_like(text)
 
 

@@ -35,6 +35,7 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "ack_repeat":   {"en": "Sure.",             "ar": "حاضر."},
     "ack_louder":   {"en": "Louder.",           "ar": "علّيت الصوت."},
     "ack_quieter":  {"en": "Quieter.",          "ar": "وطّيت الصوت."},
+    "ack_thanks":   {"en": "Anytime.",          "ar": "العفو، أي خدمة."},
 }
 
 KEYS = frozenset(_STRINGS.keys())

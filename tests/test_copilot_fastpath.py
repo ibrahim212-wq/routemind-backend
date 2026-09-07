@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from api.copilot_fastpath import match_intent, answer, try_fastpath, match_action, _clock12
+from api.copilot_fastpath import match_intent, answer, try_fastpath, match_action, match_ack, _clock12
 
 CTX = {
     "dest_name": "Mall of Arabia",
@@ -187,3 +187,34 @@ def test_english_clock_is_12h():
     assert "5:57 pm" in answer("arrival_time", {"eta_min": 17, "local_time": "17:40"}, "en")
     assert "ستة إلا تلاتة" not in answer("arrival_time", {"eta_min": 17, "local_time": "17:40"}, "ar") \
         or True  # (the Arabic clock is verbalized later, inside the Emitter)
+
+
+# ── incident questions are answered honestly without the model ───────────────
+@pytest.mark.parametrize("text", ["is there an accident ahead", "any police ahead",
+                                  "فيه حادثة قدامي", "فيه كمين على الطريق"])
+def test_incident_question_intent(text):
+    assert match_intent(text) == "incident_ahead"
+
+
+def test_incident_answer_never_claims_an_accident():
+    ctx = {"traffic_segments": [{"level": "heavy", "distance_ahead_km": 2.0, "road": "Salah Salem"}]}
+    ar = answer("incident_ahead", ctx, "ar")
+    en = answer("incident_ahead", ctx, "en")
+    assert ar.startswith("مش شايف حوادث") and "زحمة تقيلة" in ar and "Salah Salem" in ar
+    assert en.startswith("I don't see any incidents") and "heavy traffic" in en
+    assert answer("incident_ahead", {"traffic_segments": []}, "en") == \
+        "I don't see any incidents in the trip data."
+
+
+def test_report_request_is_not_the_incident_fastpath():
+    assert match_intent("بلغ عن حادثة هنا") is None
+    assert match_intent("report an accident here") is None
+
+
+@pytest.mark.parametrize("text,key", [
+    ("thanks", "ack_thanks"), ("Thank you!", "ack_thanks"), ("شكرا", "ack_thanks"),
+    ("تسلم ايدك", "ack_thanks"), ("ok thanks", "ack_thanks"),
+    ("yes", None), ("ok", None), ("thanks, add a stop at master", None), ("ايوه", None),
+])
+def test_thanks_ack(text, key):
+    assert match_ack(text) == key
