@@ -189,25 +189,169 @@ def explicit_language_request(text: str) -> Optional[str]:
     return None
 
 
+# ── Evidence lexicons (v3: a language SWITCH needs recognizable words) ─────────
+# A compact English vocabulary: function words + everyday speech + everything a
+# driver says to a navigation assistant. Membership = "this Latin token is a
+# real English word". Unknown Latin tokens (names, STT junk) are NOT evidence
+# of English; they can't flip an Arabic conversation on their own.
+_EN_WORDS = set("""
+a about above accident add address after again ahead all almost alone along
+already also alternate alternative always am an and another answer any anymore
+anything are area around arrive arrived arriving as ask at ate atm avoid away
+back bad be because been before behind best better big bit bridge bring bus by
+cafe call camera cameras can cancel car card care cash change charge charging
+check city clear close closed closest coffee cold come coming confirm cost could
+cross current day delay destination detour did different direction directions
+directly distance do does doing done dont don't down drive driver driving drop
+during each early eat eight eighteen eighty either else end enough eta even
+evening ever every exit expect fast faster fastest few fifteen fifty find fine
+first five flyover follow food for forty four free from fuel full further gas
+get getting give go going gone good got great guess had half hand happen has
+have having he hear heavy help her here hey hi highway him his hit hold home
+hospital hotel hour hours how hungry i if in inside instead into is it its jam
+just keep kilometer kilometers kilometre km know last late later lane left less
+let light like limit little long look looking lot loud louder low lower make
+many map maps me mean mechanic meter meters mile miles minute minutes mode more
+morning mosque most motorway move much mute my name navigate navigation near
+nearby nearest need never new next nice night nine ninety no normal not nothing
+now number of off office ok okay old on once one only open option options or
+other our out over park parking past pay people petrol pharmacy phone pick place
+places play please point police previous quiet quieter quick quicker quickest
+radar rain ready really recalculate remember remind reminder remove repeat
+report reroute rest restaurant right ring road roads route routes run same save
+saved say school search second see seem send set seven seventeen seventy share
+she shop shopping should show side since sixty six sixteen skip slow slower
+small so some someone something soon sorry sound speak speed speeding start
+station stay still stop stops store street sure switch take talk tell ten than
+thank thanks that the their them then there these they thing think third
+thirteen thirty this those three through time to today toll tolls too took top
+total traffic trip try turn twelve twenty two under unmute until up us use
+usual usually very voice wait want was watch water way we weather week well
+went were what when where which while who why will with without work worse
+would wrong yeah year yes yesterday yet you your zero
+""".split())
+
+# Interjections/hesitations: neutral — neither evidence of English nor junk.
+_NEUTRAL_LATIN = {"hmm", "hm", "mm", "mmm", "uh", "um", "umm", "ah", "eh", "oh",
+                  "er", "erm", "huh", "aha", "hmmm", "ehh", "ahh"}
+
+# English rendered in ARABIC SCRIPT — what the ar-EG recognizer emits when the
+# driver actually spoke English into it ("هاو لونج ليفت"). Function words and
+# core assistant verbs only; borrowed loanwords Egyptians really use inside
+# Arabic («الترافيك», «كاميرا», «روت») are deliberately NOT here.
+_TRANSLIT_EN = {
+    "هاو", "وات", "وير", "وين", "واي", "هوين", "ذا", "ذي", "ذيس", "ذات",
+    "إز", "از", "إيز", "آر", "دو", "دوز", "دونت", "بليز",
+    "ثانكس", "ثانك", "يو", "مي", "ماي", "تو", "فور", "فروم", "أند", "اند",
+    "بت", "بات", "نوت", "يس", "نو", "تيك", "شو", "تيل", "جيت", "جو", "جوينج",
+    "تيرن", "نيكست", "لفت", "رايت", "ستوب", "كانسل", "ميوت", "أنميوت",
+    "لاودر", "ريبيت", "سويتش", "أفويد", "اسكيب", "ريمايند", "شير", "كول",
+    "هوم", "وورك", "ورك", "لونج", "ليفت", "فار", "مني", "ماني",
+    "سبيد", "ليميت", "فاست", "فاستر", "فاستست", "روود", "ستريت", "هايواي",
+    "تول", "تولز", "إكسيت", "اكسيت", "بريدج", "ستيشن", "بيتزا", "أوردر",
+    "بوك", "فلايت", "تايم", "أرايف", "ارايف", "أرايفنج", "مينتس", "مينت",
+}
+_AR_WORD_RE = re.compile(r"[؀-ۿ]+")
+# Two-letter Arabic tokens that ARE real words a driver says («لا» = no); any
+# other two-letter fragment («ال», «ممم» after junk-filtering) is not evidence.
+_AR_SHORT_WORDS = {"لا", "لأ", "اه", "آه", "ده", "دي", "في", "من", "مش", "لو",
+                   "طب", "يا", "ما", "او", "أو", "هو", "هي", "كل", "عن", "بس"}
+
+
+def _latin_tokens(text: str):
+    return re.findall(r"[a-z][a-z']*", _norm_for_match(text))
+
+
+def _is_junk_token(tok: str) -> bool:
+    """A token with no plausible word shape: one distinct character repeated
+    ('hhh', 'ااا', 'ةةة'), or a Latin run with no vowel at all ('asdkjh')."""
+    if len(set(tok)) == 1 and len(tok) >= 2:
+        return True
+    if tok.isascii() and tok.isalpha() and len(tok) >= 3 \
+            and not any(c in "aeiouy" for c in tok):
+        return True
+    return False
+
+
+def english_evidence(text: str):
+    """(real_english_words, latin_tokens_considered) after dropping borrowed
+    proper nouns, neutral interjections and junk."""
+    stripped = _strip_tokens(text, _BORROWED_LATIN)
+    toks = [t for t in _latin_tokens(stripped) if not _is_junk_token(t)]
+    # neutral hesitations ("uh", "hmm") stay in the DENOMINATOR (they dilute a
+    # claim) but never count as real words: "mmm uh the uh" is 1 of 3.
+    real = sum(1 for t in toks if t.strip("'") in _EN_WORDS)
+    return real, len(toks)
+
+
+def arabic_evidence(text: str):
+    """(real_arabic_words, arabic_tokens_considered, transliterated_english)
+    — an Arabic token counts as a real word when it has ≥2 distinct letters
+    and isn't junk; tokens from the transliterated-English lexicon are
+    counted separately (they are evidence of ENGLISH speech)."""
+    stripped = _strip_tokens(text, _BORROWED_ARABIC)
+    toks = _AR_WORD_RE.findall(stripped)
+    translit = 0
+    real = 0
+    for t in toks:
+        letters = [c for c in t if _is_ar_letter(c)]
+        if len(letters) < 2 or _is_junk_token("".join(letters)):
+            continue
+        # transliterated-English lexicon first: its members include 2-letter
+        # renderings («شو», «ذا», «تو») that the short-word filter below
+        # would otherwise discard.
+        core = t[2:] if t.startswith("ال") and len(t) > 4 else t
+        if t in _TRANSLIT_EN or core in _TRANSLIT_EN:
+            translit += 1
+            continue
+        if len(letters) == 2 and _norm_for_match("".join(letters)) not in                 {_norm_for_match(w) for w in _AR_SHORT_WORDS}:
+            continue
+        real += 1
+    return real, len(toks), translit
+
+
+def is_transliterated_english(text: str) -> bool:
+    """Arabic script that is really English (the ar-EG recognizer heard an
+    English sentence): ≥2 lexicon hits and they dominate the Arabic tokens."""
+    real, n, translit = arabic_evidence(text)
+    return translit >= 2 and translit >= 0.6 * max(1, real + translit)
+
+
+# Below this STT confidence, a language that differs from the conversation's
+# is not trusted to switch it: the mic was most likely open in the wrong
+# language (Android has one recognizer; its wrong-language output is real-
+# looking words at low confidence). The client's own cross-language retry
+# handles the very-low-confidence case before it ever reaches us.
+STT_SWITCH_MIN_CONF = 0.55
+
+
 # ── THE resolver ──────────────────────────────────────────────────────────────
 @dataclass
 class ResolvedLang:
     lang: str        # "ar" | "en" — the single authoritative value for the turn
-    source: str      # explicit | arabizi | script | sticky | fallback
+    source: str      # explicit | arabizi | translit | evidence | sticky | fallback
     arabizi: bool    # input was Latin-script Arabic (model must be told)
+    unreliable: bool = False   # low-confidence / garbled: model should confirm briefly
 
 
 def resolve_language(text: str,
                      prev_lang: Optional[str] = None,
-                     app_lang: str = "en") -> ResolvedLang:
+                     app_lang: str = "en",
+                     stt_lang: Optional[str] = None,
+                     stt_confidence: Optional[float] = None) -> ResolvedLang:
     """The ONE language decision for a turn.
 
-    Order of authority:
+    v3 rule: a language SWITCH needs EVIDENCE — recognizable words of the new
+    language. Gibberish, junk, numbers, names and hesitations never switch;
+    they stay with the conversation. Order of authority:
       1. An explicit request ("بالعربي" / "speak English") wins outright.
-      2. Arabizi detection (Latin-script Arabic) → Arabic.
-      3. Script ratio AFTER stripping borrowed tokens; a clear majority (≥60%)
-         wins; the 40–60% gray zone stays sticky on prev_lang.
-      4. No letters at all → prev_lang → app_lang → "en".
+      2. Arabizi (Latin-script Arabic) → Arabic; transliterated English
+         (Arabic-script English) → English.
+      3. Real-word evidence per language, borrowed tokens stripped; a clear
+         majority wins; the gray zone → Arabic sentence frame → sticky.
+      4. No evidence → prev_lang → app_lang → "en".
+      5. A switch away from prev_lang under low STT confidence is refused
+         (the recognizer was probably open in the wrong language).
     """
     text = (text or "").strip()
     prev = prev_lang if prev_lang in ("ar", "en") else None
@@ -222,38 +366,54 @@ def resolve_language(text: str,
     ar_raw, en_raw = script_counts(text)
     if en_raw > 0 and ar_raw == 0 and is_arabizi(text):
         return ResolvedLang("ar", "arabizi", True)
+    if ar_raw > 0 and is_transliterated_english(text):
+        return _guard_switch(ResolvedLang("en", "translit", False, True),
+                             prev, stt_lang, stt_confidence)
 
-    # strip borrowed vocabulary so loanwords can't flip the sentence language
-    ar, _ = script_counts(_strip_tokens(text, _BORROWED_ARABIC)) if ar_raw else (0, 0)
-    _, en = script_counts(_strip_tokens(text, _BORROWED_LATIN)) if en_raw else (0, 0)
-    if ar == 0 and en == 0:
-        # everything was borrowed tokens/digits — keep the conversation language
-        if ar_raw or en_raw:
-            # raw counts break the tie when no history exists
-            raw_guess = "ar" if ar_raw >= en_raw else "en"
-            return ResolvedLang(prev or raw_guess, "sticky" if prev else "script", False)
-        return ResolvedLang(fallback, "fallback", False)
-    if ar == 0:
-        return ResolvedLang("en", "script", False)
-    if en == 0:
-        return ResolvedLang("ar", "script", False)
-    ratio = ar / (ar + en)
+    en_real, en_n = english_evidence(text)
+    ar_real, ar_n, _ = arabic_evidence(text)
+    # An English claim needs real words AND a real share of its own tokens
+    # ("mmm uh the uh" = 1 real of 3 considered → not English evidence).
+    en_ok = en_real >= 1 and (en_real >= 2 or en_n <= 2) and en_real / max(1, en_n) >= 0.4
+    ar_ok = ar_real >= 1
+
+    if not en_ok and not ar_ok:
+        # numbers, junk, names, hesitations only → the conversation language
+        low = stt_confidence is not None and stt_confidence < STT_SWITCH_MIN_CONF
+        return ResolvedLang(fallback, "sticky" if prev else "fallback", False,
+                            unreliable=bool((ar_raw + en_raw) > 0 or low))
+    if en_ok and not ar_ok:
+        return _guard_switch(ResolvedLang("en", "evidence", False),
+                             prev, stt_lang, stt_confidence)
+    if ar_ok and not en_ok:
+        return _guard_switch(ResolvedLang("ar", "evidence", False),
+                             prev, stt_lang, stt_confidence)
+
+    # both languages carry real words → letter ratio, borrowed tokens stripped
+    ar, _ = script_counts(_strip_tokens(text, _BORROWED_ARABIC))
+    _, en = script_counts(_strip_tokens(text, _BORROWED_LATIN))
+    ratio = ar / max(1, ar + en)
     if ratio >= 0.60:
-        return ResolvedLang("ar", "script", False)
+        return _guard_switch(ResolvedLang("ar", "evidence", False), prev, stt_lang, stt_confidence)
     if ratio <= 0.40:
-        return ResolvedLang("en", "script", False)
-    # 40–60% gray zone. Two or more real Arabic words surviving the strip is
-    # an Arabic sentence FRAME carrying English nouns («عايز اروح Mall of
-    # Egypt») — that's a genuine Arabic turn even mid-English conversation.
-    # Otherwise stay sticky; with no history, lean Arabic (the common case for
-    # Egyptian mixing).
-    ar_words = sum(1 for w in _strip_tokens(text, _BORROWED_ARABIC).split()
-                   if sum(1 for c in w if _is_ar_letter(c)) >= 2)
-    if ar_words >= 2:
-        return ResolvedLang("ar", "script", False)
+        return _guard_switch(ResolvedLang("en", "evidence", False), prev, stt_lang, stt_confidence)
+    # gray zone: an Arabic sentence FRAME (≥2 real Arabic words) carrying
+    # English nouns is an Arabic turn; otherwise stay with the conversation.
+    if ar_real >= 2:
+        return ResolvedLang("ar", "evidence", False)
     if prev:
         return ResolvedLang(prev, "sticky", False)
-    return ResolvedLang("ar", "script", False)
+    return ResolvedLang("ar", "evidence", False)
+
+
+def _guard_switch(r: ResolvedLang, prev: Optional[str],
+                  stt_lang: Optional[str], conf: Optional[float]) -> ResolvedLang:
+    """Refuse a language switch that rests on a low-confidence transcript from
+    a recognizer that was open in the OTHER language: that is the signature
+    of the wrong mic, not of the driver changing language."""
+    if prev and r.lang != prev and conf is not None and conf < STT_SWITCH_MIN_CONF:
+        return ResolvedLang(prev, "sticky", False, unreliable=True)
+    return r
 
 
 # ── Output validator ──────────────────────────────────────────────────────────

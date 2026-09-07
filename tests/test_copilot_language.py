@@ -126,17 +126,37 @@ SINGLE_WORD = [
 ]
 
 NOISY_STT = [
-    # garbled fragments: stickiness must hold the conversation language
-    ("mmm uh the uh", "ar", "ar", "en"),      # real English words → English
-    ("ال ال ممم", "en", "en", "ar"),           # Arabic script fragments → Arabic
-    ("asdkjh qwerty", "ar", "en", "en"),       # Latin junk, no Arabizi markers
-    ("ةةة ييي", "en", "en", "ar"),
-    ("hhh", "ar", "en", "en"),
-    ("ااا", "en", "en", "ar"),
+    # v3 RULE: garbled/junk/hesitation input is NOT evidence of a language
+    # switch — it stays with the conversation (prev_lang). The earlier harness
+    # wrongly treated Latin junk as "English"; that was the live defect.
+    ("mmm uh the uh", "ar", "ar", "ar"),      # hesitations + one function word
+    ("mmm uh the uh", "en", "en", "en"),
+    ("ال ال ممم", "en", "en", "en"),           # Arabic junk in an English convo
+    ("asdkjh qwerty", "ar", "en", "ar"),       # Latin junk, no Arabizi → sticky
+    ("asdkjh qwerty", "en", "ar", "en"),
+    ("ةةة ييي", "en", "en", "en"),
+    ("ةةة ييي", "ar", "en", "ar"),
+    ("hhh", "ar", "en", "ar"),
+    ("ااا", "en", "en", "en"),
     ("123 456", "ar", "en", "ar"),             # digits only → sticky prev
     ("123 456", "en", "ar", "en"),
     ("...", "ar", "en", "ar"),                 # punctuation only → sticky prev
     ("؟", "en", "ar", "en"),
+    ("hmm", "ar", "en", "ar"),                 # neutral interjection
+    ("hmm", None, "en", "en"),                 # first turn: app language
+    ("uh what", "ar", "en", "en"),             # a REAL English word carries it (short)
+    ("الطر", "ar", "en", "ar"),                # cut-off Arabic word
+    ("how lo", "en", "ar", "en"),              # cut-off English ("how" is real)
+    ("any traf", "ar", "en", "en"),            # genuine switch: real word 'any'
+    # English spoken INTO the Arabic recognizer comes back as Arabic-script
+    # English — that is an ENGLISH turn (the reverse symptom).
+    ("هاو لونج ليفت", "ar", "en", "en"),
+    ("وات إز ذا سبيد ليميت", "ar", "en", "en"),
+    ("تيك مي هوم", "ar", "en", "en"),
+    ("شو ذا ترافيك", "ar", "en", "en"),
+    # …but real Egyptian sentences with a loanword are Arabic
+    ("الترافيك عامل ايه", None, "en", "ar"),
+    ("فين الكاميرا", None, "en", "ar"),
 ]
 
 EMPTY = [
@@ -160,6 +180,35 @@ EXPLICIT = [
 
 ALL_RESOLVE = (PURE_ARABIC + PURE_ENGLISH + ARABIZI + MIXED + SINGLE_WORD
                + NOISY_STT + EMPTY + EXPLICIT)
+
+
+# ── STT-confidence guard: a low-confidence transcript from the OTHER mic must
+#    not switch the conversation (that is the wrong-mic signature) ────────────
+STT_GUARD = [
+    # text, prev, mic_lang, confidence, expected
+    ("how are you the road", "ar", "en", 0.31, "ar"),   # Arabic spoken into en-US mic
+    ("how are you the road", "ar", "en", 0.80, "en"),   # confident → genuine switch
+    ("عايز اروح البيت", "en", "ar", 0.30, "en"),         # English spoken into ar-EG mic (real words)
+    ("عايز اروح البيت", "en", "ar", 0.85, "ar"),         # confident → genuine switch
+    ("فاضل كام", "ar", "ar", 0.20, "ar"),                # same language: confidence irrelevant
+    ("how long left", "en", "en", 0.20, "en"),
+    ("how long left", None, "en", 0.20, "en"),           # no history: nothing to stick to
+]
+
+
+@pytest.mark.parametrize("text,prev,mic,conf,expected", STT_GUARD)
+def test_low_confidence_switch_is_refused(text, prev, mic, conf, expected):
+    got = resolve_language(text, prev_lang=prev, app_lang="en",
+                           stt_lang=mic, stt_confidence=conf)
+    assert got.lang == expected, f"{text!r} prev={prev} conf={conf} → {got}"
+
+
+def test_unreliable_flag_marks_garbled_turns():
+    assert resolve_language("mmm uh the uh", prev_lang="ar").unreliable
+    assert resolve_language("asdkjh", prev_lang="ar").unreliable
+    assert not resolve_language("فاضل كام", prev_lang="ar").unreliable
+    assert resolve_language("how are you", prev_lang="ar", stt_lang="en",
+                            stt_confidence=0.2).unreliable
 
 
 @pytest.mark.parametrize("text,prev,app,expected", ALL_RESOLVE)
