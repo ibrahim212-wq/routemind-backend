@@ -192,12 +192,12 @@ def answer(intent: str, ctx: Dict[str, Any], lang: str) -> Optional[str]:
     if intent == "speed_limit":
         lim = ctx.get("speed_limit_kmh")
         if lim is None:
-            return ("مفيش بيانات حد سرعة للطريق ده." if ar
+            return ("مفيش حد سرعة معروف للطريق ده." if ar
                     else "No posted speed-limit data for this road.")
         spd = ctx.get("speed_kmh")
         over = spd is not None and float(spd) > float(lim) + 3
         if ar:
-            s = f"السرعة القصوى هنا {int(lim)}"
+            s = f"أقصى سرعة هنا {int(lim)}"
             if over:
                 s += " — وانت عديها شوية، خد بالك"
             return s + "."
@@ -229,7 +229,7 @@ def answer(intent: str, ctx: Dict[str, Any], lang: str) -> Optional[str]:
             dist = speak_distance(float(d) / 1000.0, lang)
             return (f"بعد {dist} تقريبًا: {man}." if ar
                     else f"In about {dist}: {man}.")
-        return (f"الحركة الجاية: {man}." if ar else f"Next up: {man}.")
+        return (f"اللفة الجاية: {man}." if ar else f"Next up: {man}.")
 
     if intent == "arrival_time":
         eta = ctx.get("eta_min", ctx.get("remaining_time_min"))

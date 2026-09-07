@@ -208,6 +208,14 @@ _MSA_TO_EGY = {
     "من فضلك": "لو سمحت", "رجاءً": "لو سمحت",
 }
 _FUTURE_RE = re.compile(r"(?<![؀-ۿ])سوف\s+(?=[يتنأا][؀-ۿ])")
+# The navigator's imperatives are ambiguous without vowels: unvocalized «خد»
+# was read as the past tense «خَد» ("he took") by Chirp3 in the dialect probe
+# («وخد الطريق» → "wa xadat it-tari'"), and as «خُد» ("take!") once vocalized.
+# One damma disambiguates it for every engine; whole-word, idempotent.
+_IMPERATIVE_DIACRITICS = {"خد": "خُد", "وخد": "وخُد"}
+_IMPERATIVE_RE = re.compile(
+    "(?<![؀-ۿ])(" + "|".join(re.escape(k) for k in
+                             sorted(_IMPERATIVE_DIACRITICS, key=len, reverse=True)) + ")(?![؀-ۿ])")
 _MSA_RE = re.compile(
     "(?<![؀-ۿ])(" + "|".join(re.escape(k) for k in
                              sorted(_MSA_TO_EGY, key=len, reverse=True)) + ")(?![؀-ۿ])")
@@ -220,4 +228,5 @@ def masri(text: str) -> str:
         return text
     t = _FUTURE_RE.sub("ه", text)                 # «سوف يكون» → «هيكون»
     t = _MSA_RE.sub(lambda m: _MSA_TO_EGY[m.group(1)], t)
+    t = _IMPERATIVE_RE.sub(lambda m: _IMPERATIVE_DIACRITICS[m.group(1)], t)
     return egyptianize(t)

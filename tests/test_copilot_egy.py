@@ -65,7 +65,16 @@ def test_formal_fossils_and_directions():
     out = masri("الطريق مزدحم الآن ولكن سوف يكون أفضل بعد 25 دقيقة.")
     assert "زحمة" in out and "دلوقتي" in out and "بس" in out and "هيكون" in out
     assert "خمسة وعشرين دقيقة" in out
-    assert masri("خد يسارًا بعد 300 متر ثم يمينًا.") == "خد شمال بعد تلتمية متر ثم يمين."
+    assert masri("خد يسارًا بعد 300 متر ثم يمينًا.") == "خُد شمال بعد تلتمية متر ثم يمين."
+
+
+def test_imperative_khod_gets_its_damma():
+    # unvocalized «خد» was read as the past «خَد» by the TTS probe; one damma
+    # makes every engine say "khod". Whole-word, idempotent, «خدت» untouched.
+    assert masri("خد يمين، وبعدين خد بالك من الرادار.") == "خُد يمين، وبعدين خُد بالك من الرادار."
+    assert masri("وخد الطريق التاني") == "وخُد الطريق التاني"
+    assert masri(masri("خد يمين")) == "خُد يمين"
+    assert masri("خدت يمين غلط") == "خدت يمين غلط"
 
 
 def test_whole_word_only():
