@@ -118,6 +118,9 @@ def _strip_tokens(text: str, tokens: List[str]) -> str:
 _DIGIT_MID  = re.compile(r"[a-z][23579][a-z]")   # ta7t, za7ma
 _DIGIT_LEAD = re.compile(r"^[23579][a-z]{3,}")   # 3ayez, 7elwa  (not "2nd")
 _DIGIT_TAIL = re.compile(r"[a-z]{3,}[23579]$")   # tare2, sawa2  (not "mp3")
+_DIGIT_LEAD2 = re.compile(r"^[237][a-z]{2}$")    # 2ol (قول), 3an (عن), 7ad (حد)
+_DIGIT_TAIL2 = re.compile(r"^[a-z]{2}[27]$")     # la2 (لأ), ba7
+_ENGLISH_ORDINALS = {"2nd", "3rd"}
 
 # Tokens individually decisive: sentence-forming Egyptian Arabic no English
 # speaker produces. (Loanwords English speakers DO borrow — yalla, khalas,
@@ -128,6 +131,11 @@ _ARABIZI_STRONG = {
     "keda", "kda", "delwa2ty", "delwaty", "asra3", "tare2", "taree2", "tari2",
     "benzeena", "banzeena", "banzeen", "wareeni", "warini", "wadini",
     "haro7", "aro7", "nro7", "erga3", "hatly", "3ala", "3la", "5od",
+    "emta", "emtaa", "hanewsal", "hanwsal", "newsal", "fadel", "fadl",
+    "fadelly", "gheir", "ghair", "rosoom", "rosom", "asdy", "asdi", "2asdy",
+    "mohandeseen", "mohandesen", "laffa", "lafa", "balash", "3adia", "3ady",
+    "3amel", "3amla", "3aml", "arawa7", "rakna", "raken", "2odam", "2odamy",
+    "oddam", "shwaya", "so2al", "3edt", "tolo2", "toro2", "saree3a", "saree3",
 }
 # Common romanized-Egyptian words: two or more together mean Arabizi
 # (individually they collide with English/loan words: "ana", "law", "bas"...).
@@ -139,14 +147,19 @@ _ARABIZI_COMMON = {
     "khod", "sheel", "shil", "hat", "raga3", "shwaya", "shwya", "roo7",
     "shar3", "midan", "kobri", "kobry", "ganb", "gamb", "ba3d", "abl",
     "wara", "odam", "yemin", "yameen", "shmal", "shemal", "ya3ni",
-    "basha", "kamel", "kamera", "balak",
+    "basha", "kamel", "kamera", "balak", "el", "kam", "tany", "tani",
+    "eh", "dah", "dih", "di", "da", "beit", "bait", "gaya", "gay",
+    "tare2", "sot", "2ol", "ol", "3alli", "warini",
 }
 _WORD_RE = re.compile(r"[a-z0-9']+")
 
 
 def _digit_letter_word(w: str) -> bool:
+    if w in _ENGLISH_ORDINALS:
+        return False
     return bool(_DIGIT_MID.search(w) or _DIGIT_LEAD.search(w)
-                or _DIGIT_TAIL.search(w))
+                or _DIGIT_TAIL.search(w) or _DIGIT_LEAD2.search(w)
+                or _DIGIT_TAIL2.search(w))
 
 
 def is_arabizi(text: str) -> bool:
@@ -389,7 +402,13 @@ def resolve_language(text: str,
         return _guard_switch(ResolvedLang("ar", "evidence", False),
                              prev, stt_lang, stt_confidence)
 
-    # both languages carry real words → letter ratio, borrowed tokens stripped
+    # both languages carry real words → the sentence FRAME (more real words)
+    # wins; «عايز الفastest route» is an Arabic sentence with an English noun.
+    if ar_real > en_real:
+        return _guard_switch(ResolvedLang("ar", "evidence", False), prev, stt_lang, stt_confidence)
+    if en_real > ar_real:
+        return _guard_switch(ResolvedLang("en", "evidence", False), prev, stt_lang, stt_confidence)
+    # equal word counts → letter ratio, borrowed tokens stripped
     ar, _ = script_counts(_strip_tokens(text, _BORROWED_ARABIC))
     _, en = script_counts(_strip_tokens(text, _BORROWED_LATIN))
     ratio = ar / max(1, ar + en)
