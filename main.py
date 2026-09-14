@@ -20,6 +20,7 @@ from api.plan_drive_stream import router as plan_drive_stream_router
 from api.trip_alert import router as trip_alert_router
 from api.places import router as places_router
 from api.copilot import router as copilot_router
+from api.links import router as links_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("routemind")
@@ -87,6 +88,9 @@ app.include_router(trip_alert_router,        prefix="/api")
 # assistant.py (v1) is QUARANTINED dead code — see api/_quarantined_assistant_v1.py
 app.include_router(places_router,            prefix="/api")
 app.include_router(copilot_router,           prefix="/api")
+# Location links: /api/links*, /api/live*, the landing pages (/p /r /l /go /open) and the
+# App Links / Universal Links well-known files live at the ROOT — no prefix.
+app.include_router(links_router)
 
 
 @app.post("/api/test-notify")

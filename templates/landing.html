@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ title }} · RouteMind</title>
+<meta name="description" content="{{ address or coords or t.tag }}">
+<meta name="theme-color" content="#0A1428">
+<link rel="canonical" href="{{ page_url }}">
+{# ── Rich preview cards (WhatsApp / Telegram / Messenger / iMessage / X) ── #}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="RouteMind">
+<meta property="og:title" content="{{ title }}">
+<meta property="og:description" content="{{ (address ~ ' · ' if address else '') ~ (coords if coords else t.tag) }}">
+<meta property="og:url" content="{{ page_url }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:locale" content="{{ 'ar_EG' if rtl else 'en_US' }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ title }}">
+<meta name="twitter:description" content="{{ coords or t.tag }}">
+<meta name="twitter:image" content="{{ og_image }}">
+{% if lat %}
+<meta property="place:location:latitude" content="{{ lat }}">
+<meta property="place:location:longitude" content="{{ lng }}">
+{% endif %}
+{# ── Facebook App Links (Messenger / Instagram in-app browsers still honour them) ── #}
+<meta property="al:android:package" content="com.routemind.app">
+<meta property="al:android:app_name" content="RouteMind">
+<meta property="al:android:url" content="{{ app_url }}">
+{% if appstore_id %}
+<meta property="al:ios:app_store_id" content="{{ appstore_id }}">
+<meta property="al:ios:app_name" content="RouteMind">
+<meta property="al:ios:url" content="{{ app_url }}">
+{# Safari Smart App Banner: opens the app with the link when installed, offers the store when not #}
+<meta name="apple-itunes-app" content="app-id={{ appstore_id }}, app-argument={{ app_url }}">
+{% endif %}
+<meta property="al:web:should_fallback" content="true">
+<style>
+  :root { --bg:#0A1428; --card:#0F1B33; --line:#1F2E4D; --text:#F4F7FB; --muted:#9FB0CC; --accent:#3AA76D; --accent2:#2E8A59; --danger:#E5A84B; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Arabic","Cairo",Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:560px; margin:0 auto; padding:16px 16px calc(24px + env(safe-area-inset-bottom)); }
+  .brand { display:flex; align-items:center; gap:10px; padding:6px 2px 14px; color:var(--muted); font-size:14px; }
+  .brand b { color:var(--text); letter-spacing:-.2px; }
+  .logo { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#1E5F8A); display:inline-block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:22px; overflow:hidden; box-shadow:0 18px 48px rgba(0,0,0,.35); }
+  .map { display:block; width:100%; aspect-ratio:1200/630; object-fit:cover; background:#132038; }
+  .body { padding:18px 18px 8px; }
+  h1 { font-size:22px; line-height:1.25; margin:0 0 6px; letter-spacing:-.3px; word-break:break-word; }
+  .sub { color:var(--muted); font-size:14.5px; margin:0 0 4px; word-break:break-word; }
+  .coords { direction:ltr; unicode-bidi:isolate; font-variant-numeric:tabular-nums; color:var(--muted); font-size:13.5px; display:inline-flex; align-items:center; gap:8px; margin-top:6px; }
+  .coords button { background:transparent; border:1px solid var(--line); color:var(--text); border-radius:10px; padding:6px 10px; font-size:12.5px; cursor:pointer; }
+  .state { margin:0 18px 12px; padding:10px 12px; border-radius:12px; background:rgba(229,168,75,.12); border:1px solid rgba(229,168,75,.35); color:#F3D9A4; font-size:14px; }
+  .actions { padding:10px 18px 18px; display:grid; gap:10px; }
+  .btn { display:flex; align-items:center; justify-content:center; gap:10px; height:52px; border-radius:14px; text-decoration:none; font-weight:700; font-size:16px; border:1px solid var(--line); color:var(--text); background:#132038; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:active { background:var(--accent2); }
+  .row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .row .btn { height:46px; font-size:14px; }
+  .note { color:var(--muted); font-size:13px; text-align:center; margin:8px 0 0; }
+  .store { display:flex; gap:8px; justify-content:center; margin-top:8px; flex-wrap:wrap; }
+  .store a { color:var(--text); text-decoration:none; font-size:13.5px; border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+  .foot { color:var(--muted); font-size:12.5px; text-align:center; margin-top:18px; }
+  #opening { display:none; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#F4F7F6; --card:#FFFFFF; --line:#E1E7EE; --text:#0E1A2B; --muted:#5B6B82; }
+    .btn { background:#F1F3F6; }
+    .map { background:#E8EEF5; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="logo" aria-hidden="true"></span><b>RouteMind</b><span>· {{ t.tag }}</span></div>
+
+  <div class="card">
+    {% if lat %}<img class="map" src="{{ og_image }}" alt="" loading="eager">{% endif %}
+    <div class="body">
+      <h1>{{ title }}</h1>
+      {% if address %}<p class="sub">{{ address }}</p>{% endif %}
+      {% if via %}<p class="sub">{{ t.via.replace('{n}', via|string) }}</p>{% endif %}
+      {% if wrapped_url %}<p class="sub" dir="ltr">{{ wrapped_url }}</p>{% endif %}
+      {% if coords %}
+      <div class="coords"><span id="coords">{{ coords }}</span><button type="button" id="copy" data-copied="{{ t.copied }}">{{ t.copy }}</button></div>
+      {% endif %}
+    </div>
+    {% if state %}<div class="state">{{ state_text }}</div>{% endif %}
+    <div class="actions">
+      <a class="btn primary" id="open" href="{{ app_url }}" data-app="{{ app_url }}" data-intent="{{ intent_url or '' }}" data-play="{{ play_url }}" data-appstore="{{ appstore_url }}" data-still="{{ t.still }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l7 19-7-4-7 4 7-19z" fill="currentColor"/></svg>
+        <span>{{ t.open }}</span>
+      </a>
+      <p class="note" id="opening">{{ t.opening }}</p>
+      {% if ext %}
+      <div class="row">
+        <a class="btn" href="{{ ext.google }}" rel="noopener">{{ t.google }}</a>
+        <a class="btn" href="{{ ext.apple }}" rel="noopener">{{ t.apple }}</a>
+        <a class="btn" href="{{ ext.waze }}" rel="noopener">{{ t.waze }}</a>
+      </div>
+      {% endif %}
+      <p class="note">{{ t.no_app }}</p>
+      <div class="store">
+        <a href="{{ play_url }}" rel="noopener">Google Play</a>
+        {% if appstore_url %}<a href="{{ appstore_url }}" rel="noopener" id="ios-store">App Store</a>{% endif %}
+      </div>
+    </div>
+  </div>
+  <p class="foot">routemind · {{ 'القاهرة والجيزة' if rtl else 'Cairo & Giza' }}</p>
+</div>
+<script nonce="{{ nonce }}">
+(function () {
+  var ua = navigator.userAgent || '';
+  var isAndroid = /Android/i.test(ua);
+  var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var open = document.getElementById('open');
+  var note = document.getElementById('opening');
+  var copy = document.getElementById('copy');
+
+  // Copy coordinates — a user gesture, so the clipboard API is allowed.
+  if (copy) copy.addEventListener('click', function () {
+    var text = document.getElementById('coords').textContent;
+    var done = function () { copy.textContent = copy.getAttribute('data-copied'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done);
+    else done();
+  });
+
+  // "Open in RouteMind": always inside the tap (browsers block scheme launches
+  // outside a user gesture). Android Chrome / custom tabs take an intent:// URL
+  // whose fallback is the Play page (with the deferred-link referrer). iOS gets
+  // the routemind:// scheme; if the page is still visible 1.6 s later the app is
+  // not installed, and we go to the store — and copy the link so the first
+  // launch can offer it (no attribution SDK: the app reads its own clipboard
+  // hint only when the user taps the chip).
+  open.addEventListener('click', function (ev) {
+    var app = open.getAttribute('data-app');
+    var intent = open.getAttribute('data-intent');
+    var play = open.getAttribute('data-play');
+    var store = open.getAttribute('data-appstore');
+    if (isAndroid && intent) {
+      ev.preventDefault();
+      window.location.href = intent;
+      return;
+    }
+    if (isIOS) {
+      ev.preventDefault();
+      if (note) note.style.display = 'block';
+      var hidden = false;
+      var onHide = function () { hidden = true; };
+      document.addEventListener('visibilitychange', function () { if (document.hidden) onHide(); });
+      window.addEventListener('pagehide', onHide);
+      window.location.href = app;
+      setTimeout(function () {
+        if (hidden || document.hidden) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) { try { navigator.clipboard.writeText(app); } catch (e) {} }
+        if (store) window.location.href = store;
+        else if (note) note.textContent = open.getAttribute('data-still') || note.textContent;
+      }, 1600);
+      return;
+    }
+    // Desktop: let the href (custom scheme) try; nothing else to do.
+  });
+})();
+</script>
+</body>
+</html>
