@@ -63,7 +63,7 @@ LIVE_MAX_MINUTES = 8 * 60
 # change and the test-suite can set them per test.
 def ANDROID_PACKAGE() -> str: return os.environ.get("ANDROID_PACKAGE", "com.routemind.app")
 def IOS_BUNDLE_ID() -> str: return os.environ.get("IOS_BUNDLE_ID", "com.routemind.app")
-def APPLE_TEAM_ID() -> str: return os.environ.get("APPLE_TEAM_ID", "S8QB4VV633")
+def APPLE_TEAM_ID() -> str: return os.environ.get("APPLE_TEAM_ID", "R3D75N7XCX")
 def APP_STORE_ID() -> str: return os.environ.get("APP_STORE_ID", "")
 def DEFAULT_TTL_DAYS() -> int: return int(os.environ.get("LINK_TTL_DAYS", "365"))
 

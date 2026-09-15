@@ -26,7 +26,7 @@ from services.link_store import MemoryLinkStore, set_link_store
 @pytest.fixture()
 def client(monkeypatch):
     monkeypatch.setenv("ANDROID_SHA256_FINGERPRINTS", "AA:BB:CC, dd:ee:ff")
-    monkeypatch.setenv("APPLE_TEAM_ID", "S8QB4VV633")
+    monkeypatch.setenv("APPLE_TEAM_ID", "R3D75N7XCX")
     monkeypatch.setenv("APP_STORE_ID", "123456789")
     monkeypatch.delenv("LINK_BASE_URL", raising=False)
     monkeypatch.delenv("MAPBOX_TOKEN", raising=False)
@@ -229,7 +229,7 @@ def test_aasa_both_paths(client):
         r = client.get(path)
         assert r.status_code == 200 and r.headers["content-type"].startswith("application/json")
         d = r.json()["applinks"]["details"][0]
-        assert d["appIDs"] == ["S8QB4VV633.com.routemind.app"]
+        assert d["appIDs"] == ["R3D75N7XCX.com.routemind.app"]
         paths = [c["/"] for c in d["components"]]
         assert "/p/*" in paths and "/l/*" in paths and "/go" in paths
         assert any(c.get("exclude") for c in d["components"] if c["/"] == "/api/*")
