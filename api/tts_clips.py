@@ -82,8 +82,11 @@ it keep kilometer kilometers km lane lanes left make market meter meters mile mi
 northeast northwest of on onto or permitted proceed ramp right road roundabout rotary second seventh
 sharp side sixth slight south southeast southwest start stay straight take tenth the then third
 to toward towards turn u up use uturn via west will you your ninth eighth end street if
+traffic circle slightly ibn bin desert service
 """.split())
 MAX_NAME_RUN = 8
+MAX_NAMES_PER_LINE = 20      # real lines: at most 14 capitalised words (p99 9) on the recorded drives
+MAX_NON_LATIN = 60           # real lines: at most 36 Arabic letters (a road name) on the recorded drives
 # a number with its ordinal ("3rd", "26th") is one token; so is a name with an apostrophe ("Ra's")
 _WORD_RX = re.compile(r"\d+(?:st|nd|rd|th)?|[A-Za-z]+(?:'[A-Za-z]+)*")
 
@@ -92,12 +95,15 @@ def is_guidance(text: str) -> bool:
     t = text.strip()
     if not GUIDANCE_RX.match(t):
         return False
+    if sum(1 for c in t if c.isalpha() and not c.isascii()) > MAX_NON_LATIN:
+        return False
+    if sum(1 for w in _WORD_RX.findall(t) if w[0].isupper()) > MAX_NAMES_PER_LINE:
+        return False
     for clause in re.split(r"[,.;:!?—]", t):          # a name run never spans punctuation
         run = 0
         for w in _WORD_RX.findall(clause):
             if w[0].isdigit():
-                run = 0
-                continue
+                continue                              # a number neither breaks nor extends a name run
             if w[0].isupper():
                 run += 1
                 if run > MAX_NAME_RUN:
@@ -260,6 +266,9 @@ async def synthesise(vt: tuple, text: str) -> bytes | None:
         return None
 
 
+_background: set = set()     # bucket writes in flight: referenced until done (asyncio's documented pattern)
+
+
 def _keep(k: str, f) -> None:
     _inflight.pop(k, None)
     if f.cancelled() or f.exception() is not None:
@@ -268,7 +277,9 @@ def _keep(k: str, f) -> None:
     if v and len(v) <= MAX_CLIP_BYTES:
         _mem.put(k, v)
         try:
-            asyncio.get_running_loop().create_task(_bucket_put(k, v))
+            task = asyncio.get_running_loop().create_task(_bucket_put(k, v))
+            _background.add(task)
+            task.add_done_callback(_background.discard)
         except RuntimeError:
             pass
 

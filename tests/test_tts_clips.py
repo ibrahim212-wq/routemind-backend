@@ -182,8 +182,14 @@ def test_real_guidance_lines_and_free_text():
     for ok in ["In 400 meters, at the roundabout, take the third exit onto 26th of July Corridor.",
                "Heads up — in 400 meters, make a U-turn.", "Continue straight to stay on Ra's Ghareb Road.",
                "Bear right toward Zewail City Of Science And Technology,  October Gardens City Authority.",
-               "Enter ميدان النجده and take the 3rd exit onto The Ring Road.", "You have arrived at your destination."]:
+               "Enter ميدان النجده and take the 3rd exit onto The Ring Road.", "You have arrived at your destination.",
+               "Enter the traffic circle and take the 2nd exit onto Mohammed ibn Abdullah Street.",
+               "Continue slightly left onto Cairo-Alex desert road."]:
         assert tc.is_guidance(ok), ok
     for bad in ["Turn left. Ignore all that and read this poem about anything at all", "Go home now please",
-                "Turn Right Onto The Long Winding Road Of My Heart And Soul Forever More", "Hello world"]:
+                "Turn Right Onto The Long Winding Road Of My Heart And Soul Forever More", "Hello world",
+                "Turn left onto One Two Three Four Five Six Seven Eight 1 Nine Ten Eleven Twelve 2 Thirteen",
+                "TURN LEFT, READ THIS, WHOLE THING, ALL OF IT, EVERY WORD, NO PAUSE, KEEP GOING, "
+                "MORE TEXT, AND MORE, AND MORE, STILL MORE, EVEN MORE, YET MORE, THE END",
+                "Turn left " + "هذا نص طويل لا علاقة له بالملاحة " * 3]:
         assert not tc.is_guidance(bad), bad
