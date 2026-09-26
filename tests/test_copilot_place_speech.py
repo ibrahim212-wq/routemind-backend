@@ -140,3 +140,17 @@ def test_round3_lam_alif_numbers_generic_phrases_one_pass():
 
 def test_the_users_own_words_in_a_not_found_result_are_not_collected():
     assert ps.google_names("call_place", {"found": False, "requested": "ماما"}) == set()
+
+
+def test_round4_tatweel_spelling_variants_abbreviations_placeholders_lam():
+    assert ps.scrub("روح لـCarrefour Maadi", {"Carrefour Maadi"}, "ar") == "روح المكان ده"
+    assert ps.scrub("عايز تروح لـZooba؟", {"Zooba"}, "ar") == "عايز تروح المكان ده؟"
+    assert ps.scrub("الـCity Stars زحمة", {"City Stars"}, "ar") == "المكان ده زحمة"
+    assert ps.scrub("روح صيدليه العزبي", {"صيدلية العزبي"}, "ar") == "روح المكان ده"
+    assert ps.scrub("Dr. Mohamed's clinic is 2 km ahead", {"Dr. Hamdy Clinic"}, "en") \
+        == "Dr. Mohamed's clinic is 2 km ahead"
+    assert ps.scrub("روح للبان", {"اللبان"}, "ar") == "روح المكان ده"
+    # the placeholder is never scrubbed a second time (the emitter runs the scrub twice)
+    once = ps.scrub("Go to Place now", {"Place"}, "en")
+    assert ps.scrub(once, {"Place"}, "en") == once
+    assert ps.google_names("find_places", {"places": [{"name": "Car Wash"}, {"name": "سوبر ماركت"}]}) == set()

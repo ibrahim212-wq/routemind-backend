@@ -52,10 +52,12 @@ _GENERIC = frozenset({
     "total", "mobil", "shell", "mall", "cafe", "café", "coffee", "shop", "store", "pharmacy", "hospital", "clinic",
     "bank", "atm", "market", "supermarket", "restaurant", "station", "gas", "fuel", "petrol", "parking", "garage",
     "hotel", "school", "mosque", "church", "center", "centre", "city", "street", "road", "gate", "no", "building",
-    "bldg", "branch", "the", "of", "and", "el", "al", "new", "old",
+    "bldg", "branch", "the", "of", "and", "el", "al", "new", "old", "dr", "st", "mr", "mrs", "eng", "co",
+    "car", "wash", "bakery", "gym", "kiosk", "laundry", "police", "super", "shop", "salon", "barber",
     "مول", "كافيه", "كافي", "قهوه", "صيدليه", "مستشفي", "عياده", "بنك", "سوبرماركت", "ماركت", "مطعم", "محطه",
     "بنزين", "بنزينه", "جراج", "فندق", "مدرسه", "مسجد", "جامع", "كنيسه", "مركز", "شارع", "طريق", "بوابه", "رقم",
-    "فرع", "مبني", "مدينه", "جديد", "قديم",
+    "فرع", "مبني", "مدينه", "جديد", "قديم", "سوبر", "مخبز", "فرن", "كشك", "بقاله", "مغسله", "محل", "ورشه",
+    "صالون", "كوافير", "جيم",
 })
 
 _LETTER_RX = re.compile(r"[^\W\d_]+")
@@ -89,7 +91,8 @@ _NOTE = (" Descriptive place content (ratings, reviews, hours, phone, address) i
 
 _SHOWN_RX = re.compile(r"\[Shown:\s*([^\]]*)\]")
 _SHOWN_ITEM_RX = re.compile(r"(?:^|,)\s*\d+[.)]\s*")
-_PROCLITIC = r"(?:وال|بال|فال|لل|ال|و|ب|ف|ل)?"
+# A proclitic, optionally followed by a tatweel («لـZooba», «الـCity Stars»).
+_PROCLITIC = r"(?:(?:وال|بال|فال|لل|ال|و|ب|ف|ل)ـ?)?"
 
 
 def place_content_spoken() -> bool:
@@ -171,14 +174,32 @@ def _variants(name: str, lang: str) -> Set[str]:
     for part in re.split(r"(?<=\.)\s+", name):
         if part != name:
             v.add(part.strip())
-    v = {x for x in v if len(x) >= 3 and not _generic(x)}
+    v = {x for x in v if _usable(x)}
     if lang == "ar":
         try:
             from api.copilot_egy import masri
-            v |= {m for m in (masri(x) for x in v) if len(m) >= 3 and not _generic(m)}
+            v |= {m for m in (masri(x) for x in v) if _usable(m)}
         except Exception:  # pragma: no cover
             pass
     return v
+
+
+def _usable(x: str) -> bool:
+    """A form worth scrubbing: 3+ characters, a real (non-generic) word, not an abbreviation alone ("Dr."), and
+    not part of a placeholder (which the emitter's second pass would scrub again)."""
+    if len(x) < 3 or _generic(x) or re.fullmatch(r"\w{1,4}\.", x):
+        return False
+    xl = x.lower()
+    return not any(xl in ph.lower() for ph in _PLACEHOLDER.values())
+
+
+_EQUIV = {"ة": "[ةه]", "ه": "[ةه]", "ى": "[ىي]", "ي": "[ىي]", "أ": "[أإآا]", "إ": "[أإآا]", "آ": "[أإآا]",
+          "ا": "[أإآا]"}
+
+
+def _form_rx(f: str) -> str:
+    """A form as a regex that also matches the common Arabic spelling variants (ة/ه, ى/ي, أ/إ/آ/ا)."""
+    return "".join(_EQUIV.get(c, re.escape(c)) for c in f)
 
 
 @lru_cache(maxsize=64)
@@ -188,9 +209,12 @@ def _pattern(names: frozenset, lang: str):
     alts = []
     for n in names:
         for f in _variants(n, lang):
-            alts.append((len(f), _PROCLITIC + re.escape(f)))
+            alts.append((len(f), _PROCLITIC + _form_rx(f)))
             if f.startswith("ال") and len(f) > 3:
-                alts.append((len(f), r"(?:و|ف)?لل" + re.escape(f[2:])))
+                rest = f[2:]
+                alts.append((len(f), r"(?:و|ف)?للـ?" + _form_rx(rest)))
+                if rest.startswith("ل"):               # «اللبان» after ل is «للبان», not «لللبان»
+                    alts.append((len(f), r"(?:و|ف)?لـ?" + _form_rx(rest)))
     if not alts:
         return None
     alts.sort(key=lambda a: -a[0])
