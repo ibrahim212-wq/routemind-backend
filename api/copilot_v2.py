@@ -53,6 +53,8 @@ from api.copilot_fastpath import try_fastpath, match_action, match_ack
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
 from api.usage_limits import COPILOT_TURNS, copilot_turns_per_day
+from api.copilot_place_speech import (PLACE_SPEECH_RULE, context_for_model, for_model,
+                                      place_content_spoken)
 
 logger = logging.getLogger("routemind.copilot.v2")
 
@@ -1285,7 +1287,9 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         return
 
     lang_rule = _lang_rule(lang, res.arabizi, res.unreliable)
-    ctx_block = _format_context_v2(ctx)
+    # The model never receives Google place content unless the flag says it may be spoken
+    # (api/copilot_place_speech.py): the context's destination / stop names and the place tools' results.
+    ctx_block = _format_context_v2(context_for_model(ctx))
     pending = ""
     if req.pending_action:
         pending = ("\n[Pending action awaiting user confirmation]\n"
@@ -1294,6 +1298,8 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
     messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_V2}]
     messages += history[:-1]
     messages.append({"role": "system", "content": "LANGUAGE: " + lang_rule})
+    if not place_content_spoken():
+        messages.append({"role": "system", "content": PLACE_SPEECH_RULE})
     messages.append({"role": "user",
                      "content": f"{user_text}\n\n{ctx_block}{pending}"})
 
@@ -1394,7 +1400,7 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                     yield em.action(action)
                 messages.append({"role": "tool",
                                  "tool_call_id": tc["id"] or f"call_{i}",
-                                 "content": json.dumps(result_obj,
+                                 "content": json.dumps(for_model(tc["name"], result_obj),
                                                        ensure_ascii=False)})
             messages.append({"role": "system",
                              "content": _TOOL_FOLLOWUP_V2 + " " + lang_rule})
