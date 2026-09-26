@@ -49,7 +49,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from api.copilot_lang import (resolve_language, reply_lang_ok, split_sentences)
-from api.copilot_fastpath import try_fastpath, match_action, match_ack
+from api.copilot_fastpath import (try_fastpath, match_action, match_ack, match_closer, match_yes_no,
+                                  answer as fast_answer)
+from api.copilot_kb import block as kb_block
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
 from api.usage_limits import COPILOT_TURNS, copilot_turns_per_day
@@ -67,9 +69,31 @@ TURN_BUDGET_S = 14.0          # after this, no more tool rounds — wrap up
 V2_MAX_TOKENS = 230
 
 # ── System prompt (v2 rewrite) ────────────────────────────────────────────────
-SYSTEM_V2 = """You are the RouteMind Copilot — a sharp, warm, genuinely alive \
-in-car assistant riding along on a drive in Egypt. You are good company who \
-happens to be great at navigation. You are NOT a narrator and NOT a script.
+SYSTEM_V2 = """You are Sekka (سِكّة) — RouteMind's co-driver: a sharp, warm, \
+genuinely alive Egyptian riding along on the drive. Your name is the Egyptian \
+word for "the way" — you know every سكة. You are good company who happens to be \
+great at navigation. You are NOT a narrator and NOT a script. Asked who you are: \
+«أنا سِكّة، رفيقك في الطريق» / "I'm Sekka, your co-driver." Never call yourself \
+a bot, a language model, ChatGPT or OpenAI.
+
+PERSONALITY:
+- Egyptian through and through. In Arabic you talk like a Cairene friend
+  («من عينيا»، «ولا يهمك»، «خلّيها عليّا»، «تمام يا باشا») — professional,
+  never vulgar, never flirty.
+- Light humour ONLY in quiet moments (clear road, cruising, small talk) — one
+  light touch, never a joke in every reply. NO humour when a maneuver is under
+  500 m away, in heavy traffic, when they are over the speed limit, or about
+  safety, a crash, a complaint or a problem: then calm, short, practical.
+- Proactive, not chatty: do the task, say the result, stop. Never close with
+  "anything else?" / «أي خدمة تانية؟».
+
+CONVERSATION — the microphone re-opens by itself after a reply that ends in a
+question, and listens a few seconds after any other reply:
+- Ask a question ONLY when you genuinely need the answer, and make it ONE short
+  question at the very end.
+- A correction («لا، قصدي…», "no, I meant…") replaces the previous request —
+  act on the corrected one right away, no apology speech.
+- A closing («خلاص كده», "that's all", "no thanks") → a 2–4 word sign-off.
 
 VOICE — your words are spoken aloud by TTS; write for the EAR:
 - 1–2 short sentences. Almost never more. The driver is DRIVING.
@@ -126,10 +150,16 @@ TRUTH — the live trip data ALWAYS wins:
 - INCIDENTS (accident, police, hazard, closure): you know one only if the
   trip data lists it — it never does today. Heavy traffic is NOT an accident:
   say you don't see an accident in the trip data, then give the traffic.
-- You have NO road-closure data and NO weather. Never say a road is "open"
-  or "closed"; never describe the sky, sunset or temperature. For "is X
-  open?" say what the router offers («فيه طريق عن طريق الدائري أسرع بأربع
-  دقايق») and that closures aren't something you can see.
+- You have NO road-closure data. Never say a road is "open" or "closed". For
+  "is X open?" say what the router offers («فيه طريق عن طريق الدائري أسرع
+  بأربع دقايق») and that closures aren't something you can see.
+- WEATHER only through the weather tool (here, or at the destination) — fog,
+  dust, rain and heat change a drive; never describe the sky from imagination.
+- [Local knowledge] lines, when present, are checked facts about driving in
+  Egypt: use them when they answer the driver, never recite them.
+- EMERGENCY (crash, injury, fire, medical): calm and very short — hazards on,
+  get safe — and offer emergency_call (police 122, ambulance 123, fire 180);
+  it dials after ONE yes.
 - General questions (history, football, anything) — answer briefly, and tie
   back to the drive when natural.
 
@@ -156,6 +186,8 @@ ROUTES — a real navigator compares, recommends, switches:
   the previous route" → undo_route_change. "Recalculate" → reroute_now.
 - "Take me home / to work" → navigate_saved. New destination → change_
   destination. Both PREVIEW and need the driver's yes.
+- "Remind me in 20 minutes to …" / «فكرني كمان ربع ساعة …» → remind_in (a
+  timed spoken reminder). "Remind me before we arrive" → remind_before_arrival.
 
 PLACES — knowledgeable local, not a 5-category bot:
 - find_places handles ANY place type in any language; pass `query` in the
@@ -308,6 +340,26 @@ _NEW_TOOLS: List[Dict] = [
        "before we arrive', «فكرني قبل ما نوصل بعشر دقايق»). minutes_before=0 "
        "cancels a reminder.",
        {"minutes_before": {"type": "integer"}}, ["minutes_before"]),
+    _T("weather",
+       "Current weather and the next hours — visibility, fog (الشبورة), dust, "
+       "rain, wind gusts, heat — where the driver is (where='here') or at the "
+       "trip's destination (where='destination'). Use for «الجو عامل ايه», "
+       "'will it rain there', 'is there fog on the road'.",
+       {"where": {"type": "string", "enum": ["here", "destination"]}}, []),
+    _T("remind_in",
+       "A spoken reminder after N minutes, during the drive ('remind me in 20 "
+       "minutes to call Ahmed', «فكرني كمان ربع ساعة أشرب الدوا»). `about` is "
+       "the reminder in the CONVERSATION's language, in the driver's words, "
+       "phrased to be spoken back («تكلّم أحمد»). minutes=0 cancels.",
+       {"minutes": {"type": "integer"},
+        "about": {"type": "string"}}, ["minutes"]),
+    _T("emergency_call",
+       "Dial an Egyptian emergency line after ONE yes: police (النجدة 122), "
+       "ambulance (الإسعاف 123), fire (المطافي 180). For a crash, an injury, a "
+       "fire, a medical emergency or a crime — or when they ask for one of "
+       "these services.",
+       {"service": {"type": "string", "enum": ["police", "ambulance", "fire"]}},
+       ["service"]),
     _T("call_place",
        "Look up a BUSINESS/PLACE's listed phone number and preview a call "
        "(the driver confirms). place_name for a named business the user "
@@ -358,7 +410,14 @@ TOOLS_V2 = _tools_v2()
 # set just skips executing tools whose confirm slot is already taken).
 _CONFIRM_TOOLS = {"add_stop", "reroute_via", "change_destination",
                   "navigate_saved", "cancel_navigation", "report_incident",
-                  "call_place"}
+                  "call_place", "emergency_call"}
+
+# The national emergency lines (the only phone numbers Sekka ever knows by heart).
+EMERGENCY_LINES = {
+    "police":    ("122", {"ar": "النجدة", "en": "Police"}),
+    "ambulance": ("123", {"ar": "الإسعاف", "en": "Ambulance"}),
+    "fire":      ("180", {"ar": "المطافي", "en": "Fire department"}),
+}
 
 
 # ── Sunrise / sunset (NOAA simplified — pure math, no network) ────────────────
@@ -730,6 +789,36 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
     try:
         if name == "traffic_check":
             return await _traffic_check(ctx), None
+
+        if name == "weather":
+            from api.copilot_weather import weather
+            return await weather(ctx, args.get("where") or "here"), None
+
+        if name == "remind_in":
+            try:
+                m = int(args.get("minutes") or 0)
+            except (TypeError, ValueError):
+                m = 0
+            about = " ".join(str(args.get("about") or "").split())[:120]
+            if m <= 0:
+                return {"ok": True, "cancelled": True, "commit": "done",
+                        "note": "Timed reminder cleared — short ack."}, \
+                       {"type": "remind_in", "minutes": 0, "requires_confirm": False, "commit": "done"}
+            m = min(m, 240)
+            return {"ok": True, "minutes": m, "about": about, "commit": "done",
+                    "note": "Reminder SET — past-tense ack naming the minutes (and what, briefly)."}, \
+                   {"type": "remind_in", "minutes": m, "about": about,
+                    "requires_confirm": False, "commit": "done"}
+
+        if name == "emergency_call":
+            svc = args.get("service") if args.get("service") in EMERGENCY_LINES else "ambulance"
+            number, label = EMERGENCY_LINES[svc]
+            lang = "ar" if ctx.get("_turn_lang") == "ar" else "en"
+            return {"found": True, "service": svc, "number": number, "commit": "confirm",
+                    "note": f"NOT dialing yet. Ask ONE very short yes/no: call {label['en']} ({number})? "
+                            "Say the number. If someone may be hurt, add: hazards on, stay off the road."}, \
+                   {"type": "dial", "number": number, "place": label[lang], "emergency": True,
+                    "requires_confirm": True, "commit": "confirm"}
 
         if name == "report_incident":
             kind = args.get("kind", "hazard")
@@ -1217,12 +1306,20 @@ class _Emitter:
         self.spoke = True
         return [self._line({"t": "delta", "text": text + " "})]
 
+    def heard(self, text: str) -> str:
+        """What the server's ears heard (the audio path) — shown as the caption under Sekka, never spoken, so
+        it is not gated: it is the driver's own words in the script they were spoken in."""
+        return self._line({"t": "heard", "text": (text or "").strip(), "lang": self.lang})
+
     def action(self, a: Dict) -> str:
         return self._line({"t": "action", "action": a})
 
-    def done(self, expects_reply: bool) -> str:
-        return self._line({"t": "done", "expects_reply": expects_reply,
-                           "lang": self.lang})
+    def done(self, expects_reply: bool, end: bool = False) -> str:
+        """expects_reply / open_mic: Sekka asked something — the client re-opens the mic for the answer.
+        end: the conversation is over (a thank-you, a sign-off, nothing heard in a follow-up window) — the
+        client closes it instead of lingering in its follow-up listen."""
+        return self._line({"t": "done", "expects_reply": expects_reply, "open_mic": bool(expects_reply),
+                           "end": bool(end and not expects_reply), "lang": self.lang})
 
     def error(self, code: str, spoken_key: str = "err_spoken") -> str:
         """An error line carries the localized spoken text — the client speaks
@@ -1232,11 +1329,11 @@ class _Emitter:
 
 
 # ── The v2 turn generator ─────────────────────────────────────────────────────
-async def stream_v2(req) -> AsyncGenerator[str, None]:
+async def stream_v2(req, heard: Optional[str] = None) -> AsyncGenerator[str, None]:
     history = [m for m in req.messages
                if m.get("role") in ("user", "assistant") and m.get("content")]
     history = history[-base.HISTORY_MAX:]
-    ctx = req.context or {}
+    ctx = dict(req.context or {})
     user_text = history[-1]["content"] if history and history[-1]["role"] == "user" else ""
 
     # The language is resolved FIRST, from whatever we have — so even the
@@ -1244,10 +1341,14 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
     res = resolve_language(user_text, prev_lang=req.prev_lang,
                            app_lang=req.app_lang,
                            stt_lang=getattr(req, "stt_lang", None),
-                           stt_confidence=getattr(req, "stt_confidence", None))
+                           stt_confidence=getattr(req, "stt_confidence", None),
+                           stt_source=getattr(req, "stt_source", None))
     lang = res.lang
+    ctx["_turn_lang"] = lang
     em = _Emitter(lang, res.arabizi)
     yield em.meta()
+    if heard is not None:
+        yield em.heard(heard)
 
     if not base.OPENAI_KEY:
         yield em.error("not_configured")
@@ -1261,18 +1362,53 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                 f"arabizi={res.arabizi} unreliable={res.unreliable} "
                 f"history={len(history)}")
 
+    # ── A short yes / no to the action the phone is holding ──────────────────
+    # The phone executes or cancels its own pending action (the same code as its ✓ / ✕ pill); the model is
+    # not asked to re-derive a decision the driver just stated.
+    if req.pending_action:
+        yn = match_yes_no(user_text)
+        if yn:
+            logger.info(f"copilot v2 pending answered locally: {yn}")
+            yield em.action({"type": "confirm_pending", "answer": yn, "requires_confirm": False})
+            yield em.done(False)
+            return
+
     # ── Deterministic fact fast-path (no model in the loop) ──────────────────
+    # Never silent: a template that splices trip text (a road name, the SDK's
+    # maneuver in the NAVIGATION language) can fail the language gate when the
+    # driver speaks the other language — the gate then translates it, and if
+    # even that fails the turn falls through to the model instead of ending
+    # with nothing said.
     fp = try_fastpath(user_text, ctx, lang,
                       has_pending_action=bool(req.pending_action))
     if fp:
         logger.info("copilot v2 fastpath answer")
         for l in await em.delta(fp):
             yield l
-        yield em.done(False)
-        return
+        if em.spoke:
+            yield em.done(False)
+            return
+        logger.warning("copilot v2 fastpath answer did not pass the gate — model answers")
 
     # ── Deterministic ACTION fast-path (mute/unmute/repeat/volume) ───────────
     fa = None if req.pending_action else match_action(user_text)
+    note = ""
+    nav_lang = ctx.get("nav_lang")
+    if fa and fa[1]["type"] == "repeat_instruction" and nav_lang in ("ar", "en") and nav_lang != lang:
+        # The guidance voice speaks the NAVIGATION language; the driver asked in the other one. Replaying the
+        # guidance line would answer in a language they did not speak — Sekka says the next maneuver in
+        # theirs: from the template when the trip text is already in that script, else through the model.
+        said = fast_answer("next_turn", ctx, lang)
+        if said:
+            for l in await em.delta(said):
+                yield l
+            if em.spoke:
+                yield em.done(False)
+                return
+        fa = None
+        note = (f"\n[Note] The guidance voice speaks {'Arabic' if nav_lang == 'ar' else 'English'}; the driver "
+                "asked to repeat it in the pinned language: say the next maneuver yourself from the trip data, "
+                "in the pinned language — do NOT call repeat_instruction.")
     if fa:
         key, action = fa
         logger.info(f"copilot v2 fastpath action {action['type']}")
@@ -1282,12 +1418,12 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         yield em.done(False)
         return
 
-    # ── Gratitude needs no model ─────────────────────────────────────────────
-    ak = None if req.pending_action else match_ack(user_text)
+    # ── Gratitude / a sign-off needs no model — and ends the conversation ─────
+    ak = None if req.pending_action else (match_ack(user_text) or match_closer(user_text))
     if ak:
         for l in await em.delta(S(ak, lang)):
             yield l
-        yield em.done(False)
+        yield em.done(False, end=True)
         return
 
     # ── A refused language switch = the wrong-mic signature ──────────────────
@@ -1316,7 +1452,7 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
     if not place_content_spoken():
         em.unspoken |= google_names("pending_action", req.pending_action or {})
         em.unspoken |= names_in_history(history)
-    ctx_block = _format_context_v2(ctx)
+    ctx_block = _format_context_v2(ctx) + kb_block(user_text, ctx) + note
     pending = ""
     if req.pending_action:
         pending = ("\n[Pending action awaiting user confirmation]\n"
@@ -1452,3 +1588,63 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         logger.error(f"copilot v2 converse failed: {e}")
         code = "rate_limited" if "429" in str(e) else "upstream"
         yield em.error(code, "err_busy" if code == "rate_limited" else "err_spoken")
+
+
+# ── The audio path: Sekka's ears ──────────────────────────────────────────────
+# Below this transcription confidence, speech heard in a FOLLOW-UP window (the mic the client leaves open a
+# few seconds after a reply, with no tap) is treated as not addressed to Sekka — a passenger, the radio —
+# and the conversation ends silently instead of answering it.
+FOLLOW_UP_MIN_CONF = 0.55
+
+
+async def stream_voice(req, audio: bytes, filename: str = "speech.wav",
+                       content_type: str = "audio/wav",
+                       over_budget: bool = False) -> AsyncGenerator[str, None]:
+    """POST /api/copilot/voice: the driver's own audio → ONE language-agnostic transcription
+    (api/copilot_stt.py) → the very same turn (stream_v2) with the transcript as the user's words.
+
+    The transcript's language is decided by the audio, never by the conversation's last language — the root
+    fix of the wrong-language replies. `heard` follows `meta` so the phone captions what was heard while the
+    reply is still coming. The client sends the history WITHOUT this turn (it does not have the words yet);
+    it appends the heard text itself when the line arrives."""
+    from api.copilot_stt import transcribe
+    prev = req.prev_lang if req.prev_lang in ("ar", "en") else None
+    fallback = prev or (req.app_lang if req.app_lang in ("ar", "en") else "en")
+    if over_budget:
+        em = _Emitter(fallback)
+        yield em.meta()
+        yield em.error("voice_limit", "err_voice_limit")
+        return
+    if not base.OPENAI_KEY:
+        em = _Emitter(fallback)
+        yield em.meta()
+        yield em.error("not_configured")
+        return
+    stt = await transcribe(audio, filename, content_type)
+    if stt.error:
+        em = _Emitter(fallback)
+        yield em.meta()
+        yield em.error("stt_failed", "err_stt")
+        return
+    follow_up = bool(getattr(req, "follow_up", False))
+    unsure = stt.confidence is not None and stt.confidence < FOLLOW_UP_MIN_CONF
+    if not stt.text or (follow_up and unsure):
+        em = _Emitter(fallback)
+        yield em.meta()
+        yield em.heard("")
+        if follow_up:
+            yield em.done(False, end=True)      # nothing addressed to Sekka: close, silently
+        else:
+            for l in await em.delta(S("err_no_input", fallback)):
+                yield l
+            yield em.done(True)                 # one more listen (the client's next one is a follow-up)
+        return
+    msgs = [m for m in (req.messages or [])
+            if m.get("role") in ("user", "assistant") and m.get("content")]
+    msgs.append({"role": "user", "content": stt.text})
+    req.messages = msgs
+    req.stt_source = "audio"
+    req.stt_lang = None
+    req.stt_confidence = stt.confidence
+    async for line in stream_v2(req, heard=stt.text):
+        yield line

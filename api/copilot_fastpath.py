@@ -20,7 +20,17 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional, Tuple
 
-from api.copilot_lang import speak_minutes, speak_distance
+from api.copilot_lang import script_counts, speak_minutes, speak_distance
+
+
+def _in_script(field: str, lang: str) -> bool:
+    """A maneuver spliced into a template must already be in the reply's script. The navigation SDK writes
+    its instructions in the NAVIGATION language; when the driver speaks the other one, a splice («In about
+    400 meters: خليك يمين.») passes a majority-script gate yet answers half in a language the driver did not
+    speak. Such a turn is left to the model, which says the maneuver in the driver's language. (A road NAME
+    is a proper noun and keeps its script — the prompt's rule for every name.)"""
+    ar, en = script_counts(field or "")
+    return en == 0 if lang == "ar" else ar == 0
 
 # ── Guards ────────────────────────────────────────────────────────────────────
 # Any of these words → the turn wants an ACTION or a place — never fast-path.
@@ -231,13 +241,13 @@ def answer(intent: str, ctx: Dict[str, Any], lang: str) -> Optional[str]:
 
     if intent == "current_road":
         road = ctx.get("current_road")
-        if not road:
+        if not road:                         # a road NAME keeps its own script, like any proper noun
             return None
         return (f"انت ماشي على {road}." if ar else f"You're on {road}.")
 
     if intent == "next_turn":
         man = ctx.get("next_maneuver")
-        if not man:
+        if not man or not _in_script(str(man), lang):
             return None
         d = ctx.get("next_maneuver_m")
         if d is not None:
@@ -374,3 +384,60 @@ def match_ack(text: str):
     if not t or len(t.split()) > 4:
         return None
     return "ack_thanks" if any(r.search(t) for r in _THANKS) else None
+
+
+# A sign-off: the driver is done talking. Whole-utterance only, and never while an action awaits an answer
+# (there «خلاص» / "never mind" is the ANSWER, and the model reads it with the pending action).
+_CLOSERS = _rx(r"^(that'?s all|that'?s it|that is all|nothing( else)?|no thanks|no thank you|never ?mind|"
+               r"forget it|bye|bye bye|goodbye|see you|see ya|all good|i'?m good|we'?re good|all set)$",
+               r"^(خلاص|خلاص كده|خلاص كدا|خلاص كده تمام|كده تمام|كدا تمام|تمام كده|لا شكرا|لا شكرًا|"
+               r"مش عايز حاجه|مش عايز حاجة|مش عاوز حاجه|مش عاوز حاجة|ولا حاجه|ولا حاجة|انسى|انسي|"
+               r"انسى الموضوع|سيبك|سيبك منها|سلام|سلام عليكم|مع السلامه|مع السلامة|باي|يلا سلام)$")
+
+
+def match_closer(text: str):
+    """'ack_bye' for a pure sign-off, else None."""
+    t = (text or "").lower()
+    t = _POLITE.sub(" ", t)
+    t = _TRAIL_PUNCT.sub("", " ".join(t.split())).strip()
+    if not t or len(t.split()) > 4:
+        return None
+    return "ack_bye" if any(r.search(t) for r in _CLOSERS) else None
+
+
+# The answer to a pending confirmation, said in ≤ 3 words («ايوه», "no thanks", «لا خلاص»). It mirrors the
+# phones' local matcher (copilotMatchYesNo on Android and iOS): on the audio path the phone has no words of its
+# own, so the server answers `confirm_pending` and the phone executes / cancels the action it is holding —
+# no model round, no daily-limit turn. Anything longer or mixed ("no, the second one") is the model's.
+_YES = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "do it", "go ahead", "add it", "switch",
+        "alright", "ايوه", "ايوة", "اه", "نعم", "تمام", "ماشي", "موافق", "اوك", "اوكي", "يلا", "اكيد", "ضيفها",
+        "ضيفه", "بدل"}
+_NO = {"no", "nope", "cancel", "don't", "dont", "never mind", "لا", "لأ", "بلاش", "الغاء", "الغيه", "مش عايز",
+       "مش عاوز", "خلاص لا"}
+_FILLER = {"thanks", "thank you", "شكرا", "شكرًا", "يا باشا", "يا معلم", "خلاص", "بقى", "بقي"}
+
+
+def match_yes_no(text: str) -> Optional[str]:
+    """'yes' / 'no' for an unmistakable short answer, else None."""
+    t = (text or "").lower()
+    for a, b in (("أ", "ا"), ("إ", "ا"), ("آ", "ا")):
+        t = t.replace(a, b)
+    t = _POLITE.sub(" ", t)
+    t = _TRAIL_PUNCT.sub("", re.sub(r"[.!?؟،,…]", " ", t))
+    t = " ".join(t.split())
+    if not t or len(t.split()) > 3:
+        return None
+    padded = f" {t} "
+    said_yes = any(f" {w} " in padded for w in _YES)
+    said_no = any(f" {w} " in padded for w in _NO)
+    # The whole answer must BE the yes / no: «لا التانية» ("no — the second one") is a refinement, not a no.
+    rest = padded
+    for w in sorted(_YES | _NO | _FILLER, key=len, reverse=True):
+        rest = rest.replace(f" {w} ", " ").replace(f" {w} ", " ")
+    if rest.strip():
+        return None
+    if said_yes and not said_no:
+        return "yes"
+    if said_no and not said_yes:
+        return "no"
+    return None

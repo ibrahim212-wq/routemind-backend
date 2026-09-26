@@ -62,7 +62,7 @@ def test_a_model_turn_beyond_the_limit_is_an_in_stream_error_in_the_turn_languag
     assert lines[0]["t"] == "meta"
     err = [l for l in lines if l["t"] == "error"]
     assert err and err[0]["code"] == "daily_limit"
-    assert err[0]["spoken"] == "That's today's limit for the assistant. It's back tomorrow."
+    assert err[0]["spoken"] == "That's today's limit for Sekka. I'm back tomorrow."
     lines_ar = _collect(FakeReq("عايز كافيه هادي في الطريق", app_lang="ar"))
     err_ar = [l for l in lines_ar if l["t"] == "error"][0]
     assert err_ar["lang"] == "ar" and "النهارده" in err_ar["spoken"]

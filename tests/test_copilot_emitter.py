@@ -37,7 +37,7 @@ def _class_block(src: str, name: str) -> str:
 def test_all_line_types_are_emitted_only_by_the_emitter():
     block = _class_block(SRC, "_Emitter")
     outside = SRC.replace(block, "")
-    for key in ('"t": "delta"', '"t": "meta"', '"t": "done"', '"t": "error"',
+    for key in ('"t": "delta"', '"t": "meta"', '"t": "done"', '"t": "error"', '"t": "heard"',
                 '"t": "action"', "\"t\":\"delta\""):
         assert key not in outside, f"{key} is emitted outside _Emitter"
     # and the generator has no private line helper any more

@@ -338,11 +338,16 @@ def is_transliterated_english(text: str) -> bool:
 STT_SWITCH_MIN_CONF = 0.55
 
 
+# A transcript from the language-agnostic audio path (api/copilot_stt.py) below this confidence is flagged
+# unreliable: the model confirms instead of acting. It never refuses a switch — nothing was language-locked.
+AUDIO_UNSURE_CONF = 0.35
+
+
 # ── THE resolver ──────────────────────────────────────────────────────────────
 @dataclass
 class ResolvedLang:
     lang: str        # "ar" | "en" — the single authoritative value for the turn
-    source: str      # explicit | arabizi | translit | evidence | sticky | fallback
+    source: str      # explicit | arabizi | translit | evidence | sticky | fallback | guard
     arabizi: bool    # input was Latin-script Arabic (model must be told)
     unreliable: bool = False   # low-confidence / garbled: model should confirm briefly
 
@@ -351,7 +356,8 @@ def resolve_language(text: str,
                      prev_lang: Optional[str] = None,
                      app_lang: str = "en",
                      stt_lang: Optional[str] = None,
-                     stt_confidence: Optional[float] = None) -> ResolvedLang:
+                     stt_confidence: Optional[float] = None,
+                     stt_source: Optional[str] = None) -> ResolvedLang:
     """The ONE language decision for a turn.
 
     v3 rule: a language SWITCH needs EVIDENCE — recognizable words of the new
@@ -364,8 +370,17 @@ def resolve_language(text: str,
          majority wins; the gray zone → Arabic sentence frame → sticky.
       4. No evidence → prev_lang → app_lang → "en".
       5. A switch away from prev_lang under low STT confidence is refused
-         (the recognizer was probably open in the wrong language).
+         (the recognizer was probably open in the wrong language) — ONLY for
+         a transcript from a monolingual on-device recognizer. The audio path
+         (stt_source="audio": the server transcribed the driver's own audio
+         with no language given) has no wrong mic, so its transcript is taken
+         at its word: the script it wrote IS the language spoken.
     """
+    if stt_source == "audio":
+        r = resolve_language(text, prev_lang, app_lang)          # evidence only — never the wrong-mic guard
+        if stt_confidence is not None and stt_confidence < AUDIO_UNSURE_CONF:
+            r.unreliable = True
+        return r
     text = (text or "").strip()
     prev = prev_lang if prev_lang in ("ar", "en") else None
     fallback = prev or (app_lang if app_lang in ("ar", "en") else "en")

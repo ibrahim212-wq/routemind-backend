@@ -38,8 +38,22 @@ The ACTION PROTOCOL (server resolves data, client executes):
   and the client MUST get an explicit user confirmation (voice or button)
   before executing. Camera-only actions execute immediately.
 
-Deploy note: no new dependencies; same Cloud Run image. Redeploy the service
-and the endpoint is live (OPENAI_API_KEY + GOOGLE_MAPS_API_KEY already set).
+Sekka (2026-09-26) — the assistant's name, ears and voice:
+  POST /api/copilot/voice   multipart: `audio` (16 kHz mono WAV from the phone's
+        VAD recorder) + `payload` (this same request JSON, WITHOUT the new user
+        turn) → the same NDJSON stream, plus {"t":"heard","text":...} right
+        after meta. The transcript's language is decided by the AUDIO
+        (api/copilot_stt.py) — the root fix of the wrong-language replies.
+  POST /api/copilot/speak   {"text","lang"} → audio/mpeg: Sekka's one voice
+        (api/copilot_tts.py), Cairene accent in Arabic; the phones fall back to
+        their own TTS on any failure.
+  GET  /api/copilot/caps    what this backend supports — the phones probe it
+        once per session and use the audio path only when it says so.
+  done lines carry open_mic (Sekka asked — listen for the answer) and end (the
+  conversation is over — no follow-up listen).
+
+Deploy note: no new dependencies (python-multipart is already pinned); same
+Cloud Run image. OPENAI_API_KEY powers the model, the ears and the voice.
 """
 
 import os
@@ -50,8 +64,10 @@ import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, Request
-from fastapi.responses import StreamingResponse
+import math
+
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from api.places import (resolve_nearby, _google_corridor_pois, _filter_to_corridor,
@@ -1258,6 +1274,11 @@ class ConverseRequest(BaseModel):
     # X-RouteMind-Device header (or this field); filled by the endpoint, never trusted for anything else.
     device_id: Optional[str] = None
     limit_key: Optional[str] = None
+    # The audio path only (POST /copilot/voice): True when the phone opened the mic by itself after a reply
+    # (no tap) — unsure or empty speech then ends the conversation silently instead of being answered.
+    follow_up: bool = False
+    # Set by the SERVER (stream_voice) — "audio" = the transcript came from the language-agnostic ears.
+    stt_source: Optional[str] = None
 
 
 @router.post("/copilot/converse")
@@ -1273,7 +1294,72 @@ async def copilot_converse(req: ConverseRequest, request: Request):
     from api.copilot_v2 import stream_v2   # lazy: avoids an import cycle
     from api.usage_limits import user_key
     req.limit_key = user_key(request.headers, request.client.host if request.client else None, req.device_id)
+    req.stt_source = None                    # a text turn is never the audio path, whatever the body says
     return StreamingResponse(stream_v2(req),
                              media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-cache",
                                       "X-Accel-Buffering": "no"})
+
+
+@router.post("/copilot/voice")
+async def copilot_voice(request: Request, audio: UploadFile = File(...), payload: str = Form("{}")):
+    """Sekka's ears: the driver's audio + the turn's JSON → the NDJSON turn (see the module docstring)."""
+    from api.copilot_v2 import stream_voice
+    from api.copilot_stt import MAX_AUDIO_BYTES, MAX_AUDIO_S, wav_duration_s
+    from api.usage_limits import VOICE_SECONDS, user_key, voice_seconds_per_day
+    try:
+        req = ConverseRequest(**json.loads(payload or "{}"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="bad payload")
+    data = await audio.read(MAX_AUDIO_BYTES + 1)
+    if len(data) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="audio too long")
+    dur = wav_duration_s(data)
+    if dur is not None and dur > MAX_AUDIO_S:
+        raise HTTPException(status_code=413, detail="audio too long")
+    req.limit_key = user_key(request.headers, request.client.host if request.client else None, req.device_id)
+    req.stt_source = None
+    secs = int(math.ceil(dur)) if dur else max(1, len(data) // 32000)
+    over = not VOICE_SECONDS.take(req.limit_key, voice_seconds_per_day(), amount=secs)
+    return StreamingResponse(stream_voice(req, data, audio.filename or "speech.wav",
+                                          audio.content_type or "audio/wav", over_budget=over),
+                             media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+class SpeakRequest(BaseModel):
+    text: str
+    lang: str = "en"
+    device_id: Optional[str] = None
+
+
+@router.post("/copilot/speak")
+async def copilot_speak(req: SpeakRequest, request: Request):
+    """Sekka's voice: assistant text → MP3 (api/copilot_tts.py). A cache hit is never charged to the budget;
+    past the budget the answer is 429 and the phone speaks with its own voice."""
+    from api.copilot_tts import CACHE, cache_key, clean, synthesize
+    from api.usage_limits import TTS_CHARS, tts_chars_per_day, user_key
+    lang = "ar" if req.lang == "ar" else "en"
+    text = clean(req.text)
+    if not text:
+        raise HTTPException(status_code=400, detail="no text")
+    if CACHE.get(cache_key(text, lang)) is None:
+        key = user_key(request.headers, request.client.host if request.client else None, req.device_id)
+        if not TTS_CHARS.take(key, tts_chars_per_day(), amount=len(text)):
+            raise HTTPException(status_code=429, detail="voice budget used")
+    audio, _ = await synthesize(text, lang)
+    if not audio:
+        raise HTTPException(status_code=503, detail="tts unavailable")
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/copilot/caps")
+async def copilot_caps():
+    """What this backend supports. The phones probe it once per navigation session: `voice` = the audio path
+    (else they use their on-device recognizer, as before), `speak` = Sekka's server voice."""
+    from api.copilot_stt import STT_MODEL
+    from api.copilot_tts import TTS_MODEL
+    on = bool(OPENAI_KEY)
+    return {"v": 3, "voice": on, "speak": on, "max_audio_s": 20,
+            "stt_model": STT_MODEL, "tts_model": TTS_MODEL,
+            "name": {"ar": "سِكّة", "en": "Sekka"}}

@@ -28,8 +28,13 @@ _STRINGS: Dict[str, Dict[str, str]] = {
                      "ar": "ثانية واحدة، مشغول شوية. قول تاني؟"},
     "err_no_input": {"en": "I didn't catch that.", "ar": "مسمعتش. قول تاني؟"},
     # The per-user daily limit (api/usage_limits.py) — spoken, in the turn's language.
-    "err_daily_limit": {"en": "That's today's limit for the assistant. It's back tomorrow.",
-                        "ar": "ده آخر حد للمساعد النهارده. هيرجع بكرة."},
+    "err_daily_limit": {"en": "That's today's limit for Sekka. I'm back tomorrow.",
+                        "ar": "ده آخر حد لسِكّة النهارده. هرجع بكرة."},
+    # The audio path (api/copilot_stt.py): the ears failed / the day's listening budget is used.
+    "err_stt":      {"en": "Sorry, I lost you for a second. Try again?",
+                     "ar": "معلش، السمع قطع ثانية. جرّب تاني؟"},
+    "err_voice_limit": {"en": "That's today's listening limit for Sekka. I'm back tomorrow.",
+                        "ar": "ده آخر حد للسمع النهارده. هرجع بكرة."},
     # A garbled / low-confidence transcript: confirm before acting.
     "unclear_ask":  {"en": "Say that once more?", "ar": "معلش، قولها تاني؟"},
     # Deterministic single-intent commands (no model in the loop): the ack.
@@ -39,6 +44,8 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "ack_louder":   {"en": "Louder.",           "ar": "علّيت الصوت."},
     "ack_quieter":  {"en": "Quieter.",          "ar": "وطّيت الصوت."},
     "ack_thanks":   {"en": "Anytime.",          "ar": "العفو، أي خدمة."},
+    # A sign-off («خلاص كده», "that's all"): the conversation ends here.
+    "ack_bye":      {"en": "Okay — I'm here if you need me.", "ar": "تمام، أنا معاك لو احتجت حاجة."},
 }
 
 KEYS = frozenset(_STRINGS.keys())

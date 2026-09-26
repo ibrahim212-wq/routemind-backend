@@ -4,6 +4,8 @@ repo).
 
   copilot turns that reach the model   ≤ COPILOT_TURNS_PER_DAY (default 40) per user per Cairo day
   Plan-a-Drive plans (plan-drive-stream) ≤ PLANS_PER_DAY        (default 10) per user per Cairo day
+  Sekka's ears (audio transcribed)     ≤ COPILOT_VOICE_SECONDS_PER_DAY (default 600 s) per user per Cairo day
+  Sekka's voice (characters spoken)    ≤ COPILOT_TTS_CHARS_PER_DAY     (default 12000) per user per Cairo day
 
 The user is the app's device id (the `X-RouteMind-Device` header — the same UUID the app registers with its FCM
 token); an old client without it is keyed by its address, which is weaker but
@@ -38,6 +40,16 @@ def plans_per_day() -> int:
     return int(os.getenv("PLANS_PER_DAY", "10"))
 
 
+def voice_seconds_per_day() -> int:
+    """Ten minutes of the driver's own speech a day ≈ 150 requests ≈ $0.03 of transcription at most."""
+    return int(os.getenv("COPILOT_VOICE_SECONDS_PER_DAY", "600"))
+
+
+def tts_chars_per_day() -> int:
+    """≈ 150 spoken replies a day; past it the phone speaks with its own voice (nothing is refused)."""
+    return int(os.getenv("COPILOT_TTS_CHARS_PER_DAY", "12000"))
+
+
 def cairo_today(now: Optional[datetime] = None) -> date:
     return (now or datetime.now(_CAIRO)).astimezone(_CAIRO).date()
 
@@ -50,7 +62,9 @@ class DailyCounter:
         self._counts: Dict[str, int] = {}
         self._lock = threading.Lock()
 
-    def take(self, key: str, limit: int, now: Optional[datetime] = None) -> bool:
+    def take(self, key: str, limit: int, now: Optional[datetime] = None, amount: int = 1) -> bool:
+        """Count `amount` (1 for a turn; seconds / characters for the metered budgets). A request that starts
+        under the limit is served whole — a budget is a daily ceiling, not a guillotine mid-sentence."""
         day = cairo_today(now)
         with self._lock:
             if day != self._day:
@@ -59,7 +73,7 @@ class DailyCounter:
             used = self._counts.get(key, 0)
             if used >= limit:
                 return False
-            self._counts[key] = used + 1
+            self._counts[key] = used + max(1, int(amount))
             return True
 
     def used(self, key: str) -> int:
@@ -69,6 +83,8 @@ class DailyCounter:
 
 COPILOT_TURNS = DailyCounter()
 PLANS = DailyCounter()
+VOICE_SECONDS = DailyCounter()
+TTS_CHARS = DailyCounter()
 
 
 def user_key(headers: Mapping[str, str], client_host: Optional[str], device_id: Optional[str] = None) -> str:
