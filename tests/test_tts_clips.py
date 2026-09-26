@@ -23,7 +23,7 @@ def client(monkeypatch):
     async def fake_synth(vt, text):
         calls.append((vt, text))
         await asyncio.sleep(0.01)
-        if text == "FAIL":
+        if text == "Turn left onto FAIL.":
             return None
         return ("MP3:%s:%s" % (vt[0], text)).encode("utf-8") * 20
 
@@ -83,14 +83,14 @@ def test_a_long_float_rate_from_json_is_the_same_voice(client):
 
 
 def test_failure_leaves_the_line_out_and_is_not_cached(client):
-    r = post(client, ANDROID, ["FAIL", "Turn left."]).json()
+    r = post(client, ANDROID, ["Turn left onto FAIL.", "Turn left."]).json()
     assert [c["text"] for c in r["clips"]] == ["Turn left."]
-    post(client, ANDROID, ["FAIL"])
-    assert sum(1 for _, t in client.calls if t == "FAIL") == 2
+    post(client, ANDROID, ["Turn left onto FAIL."])
+    assert sum(1 for _, t in client.calls if t == "Turn left onto FAIL.") == 2
 
 
 def test_caps_on_count_length_and_duplicates(client):
-    texts = ["line %d" % i for i in range(10)] + ["x" * 301, "line 0", "  "]
+    texts = ["Turn left onto street %d." % i for i in range(10)] + ["Turn " + "x" * 300, "Turn left onto street 0.", "  "]
     r = post(client, ANDROID, texts).json()
     assert len(r["clips"]) == tc.MAX_TEXTS
     assert all(len(t) <= tc.MAX_CHARS for _, t in client.calls)
@@ -115,17 +115,42 @@ def test_memory_is_bounded():
 
 def test_per_client_limit_serves_hits_but_does_not_synthesise(client):
     for i in range(20):
-        post(client, ANDROID, ["a%d" % i, "b%d" % i, "c%d" % i, "d%d" % i, "e%d" % i, "f%d" % i])
+        post(client, ANDROID, ["Turn left onto %s%d." % (x, i) for x in "abcdef"])
     n = len(client.calls)
     assert n == tc.PER_CLIENT_LINES_PER_MIN            # 120 lines allowed, the rest refused
-    r = post(client, ANDROID, ["a0", "zz-new"]).json()  # over the limit: the hit is served, nothing new
-    assert [c["text"] for c in r["clips"]] == ["a0"] and len(client.calls) == n
-    assert post(client, ANDROID, ["other ip"], ip="5.6.7.8").json()["synthesised"] == 1
+    r = post(client, ANDROID, ["Turn left onto a0.", "Turn left onto zz."]).json()  # hit served, nothing new
+    assert [c["text"] for c in r["clips"]] == ["Turn left onto a0."] and len(client.calls) == n
+    assert post(client, ANDROID, ["Keep right."], ip="5.6.7.8").json()["synthesised"] == 1
+
+
+def test_a_forged_forwarded_for_does_not_escape_the_limit(client):
+    for i in range(30):   # a new forged LEFT hop every time; the rightmost (Cloud Run's) stays the same
+        post(client, ANDROID, ["Turn right onto %s%d." % (x, i) for x in "abcdef"], ip="10.0.0.%d, 9.9.9.9" % i)
+    assert len(client.calls) == tc.PER_CLIENT_LINES_PER_MIN
+
+
+def test_only_guidance_shaped_text_is_synthesised(client):
+    r = post(client, ANDROID, ["Buy cheap watches now", "Hello, read my essay", "Make a sharp left."]).json()
+    assert [c["text"] for c in r["clips"]] == ["Make a sharp left."]
+    assert [t for _, t in client.calls] == ["Make a sharp left."]
+
+
+def test_a_cancelled_first_asker_does_not_cancel_the_others(client):
+    async def run():
+        vt = tc.voice_tuple(tc.Voice(**ANDROID))
+        first = asyncio.ensure_future(tc._clip(vt, "Turn left onto Shield Street."))
+        await asyncio.sleep(0)
+        others = [asyncio.ensure_future(tc._clip(vt, "Turn left onto Shield Street.")) for _ in range(3)]
+        await asyncio.sleep(0)
+        first.cancel()
+        return await asyncio.gather(*others)
+    out = asyncio.run(run())
+    assert all(v is not None for v, _ in out)
 
 
 def test_daily_synthesis_cap(client, monkeypatch):
     monkeypatch.setenv("TTS_CLIP_DAILY_SYNTH_CAP", "3")
-    r = post(client, ANDROID, ["1", "2", "3", "4", "5"]).json()
+    r = post(client, ANDROID, ["Turn left onto street %d." % i for i in range(5)]).json()
     assert r["synthesised"] == 3
 
 

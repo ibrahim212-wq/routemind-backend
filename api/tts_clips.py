@@ -17,9 +17,14 @@ Guard rails
   - The bucket, or Cloud TTS, failing costs nothing but that line: it is left out of the answer and the
     app synthesises it live at its trigger, as before. Nothing on the app's speaking path waits for this.
   - Hit rate: every request logs hits / misses; GET /api/tts/clips/stats returns the running counters.
-  - Abuse: the endpoint is public (like the rest of this API), so it is not a free TTS proxy — a client
-    gets at most PER_CLIENT_LINES_PER_MIN lines a minute, and an instance synthesises at most
-    TTS_CLIP_DAILY_SYNTH_CAP new lines a day; past either, only cached clips are served.
+  - Abuse: the endpoint is public (like the rest of this API), so it is not a free TTS proxy:
+      * only text shaped like an English guidance instruction is synthesised (GUIDANCE_RX) — anything
+        else is simply not served (the app then synthesises it live, as before);
+      * a client (the RIGHTMOST X-Forwarded-For hop, which Cloud Run appends and a caller cannot forge)
+        gets at most PER_CLIENT_LINES_PER_MIN lines a minute;
+      * an instance synthesises at most TTS_CLIP_DAILY_SYNTH_CAP new lines a day.
+    Past any of them only cached clips are served. App Check and a GLOBAL cap are deploy prerequisites
+    (docs/cost/phase1-report.md, Needs Khaled).
 
 Env: GOOGLE_TTS_API_KEY (the Cloud TTS key; without it only cache hits are served),
      TTS_CLIP_BUCKET (optional GCS bucket name; without it the cache is memory-only per instance).
@@ -30,6 +35,7 @@ import base64
 import hashlib
 import logging
 import os
+import re
 import time
 from collections import OrderedDict
 
@@ -49,8 +55,21 @@ MAX_TEXTS = 6
 MAX_CHARS = 300
 MEM_MAX_BYTES = 16 * 1024 * 1024
 MAX_CLIP_BYTES = 512 * 1024
-TTS_TIMEOUT_S = 8.0
+TTS_TIMEOUT_S = 5.0          # well under the app's 8 s: the server never pays for an answer the app gave up on
 PER_CLIENT_LINES_PER_MIN = 120
+
+# The shape of an English guidance line: the Directions API's English voice instructions as the app
+# speaks them (an optional "Heads up — " and "In <distance>, " then a maneuver / arrival phrase).
+GUIDANCE_RX = re.compile(
+    r"^(?:Heads up — )?(?:[Ii]n [\d.,]+ (?:meters?|kilometers?|km|miles?|feet), )?"
+    r"(?:turn|continue|keep|take|at the roundabout|make a|merge|exit|enter|go|start|drive|head|bear|"
+    r"stay|you have arrived|you will arrive|you are arriving|your destination|arrive|proceed|the destination|"
+    r"then|slight|sharp|use the|ramp|u-turn)\b",
+    re.IGNORECASE)
+
+
+def is_guidance(text: str) -> bool:
+    return bool(GUIDANCE_RX.match(text.strip()))
 
 
 def _daily_cap() -> int:
@@ -166,7 +185,7 @@ def _get_bucket():
 
 
 async def _bucket_get(k: str):
-    b = _get_bucket()
+    b = await asyncio.to_thread(_get_bucket)   # the first call builds the client: off the event loop
     if b is None:
         return None
     try:
@@ -176,7 +195,7 @@ async def _bucket_get(k: str):
 
 
 async def _bucket_put(k: str, data: bytes):
-    b = _get_bucket()
+    b = await asyncio.to_thread(_get_bucket)
     if b is None:
         return
     try:
@@ -216,22 +235,26 @@ async def _clip(vt: tuple, text: str, may_synthesise: bool = True) -> tuple[byte
     # One synthesis per key even when several devices ask at once.
     fut = _inflight.get(k)
     if fut is None:
-        if not may_synthesise or not _synth_budget_ok():
+        if not may_synthesise or not is_guidance(text) or not _synth_budget_ok():
             return None, "failed"
         _day["synth"] += 1
         fut = asyncio.ensure_future(synthesise(vt, text))
         _inflight[k] = fut
         try:
-            v = await fut
+            # shield: a cancelled first requester never cancels the synthesis the others wait on
+            v = await asyncio.shield(fut)
         finally:
-            _inflight.pop(k, None)
+            if fut.done():
+                _inflight.pop(k, None)
+            else:
+                fut.add_done_callback(lambda _f, k=k: _inflight.pop(k, None))
         if v and len(v) <= MAX_CLIP_BYTES:
             _mem.put(k, v)
             await _bucket_put(k, v)
             return v, "synthesised"
         return None, "failed"
-    v = await fut
-    return (v, "synthesised") if v else (None, "failed")
+    v = await asyncio.shield(fut)
+    return (v, "synthesised") if v and len(v) <= MAX_CLIP_BYTES else (None, "failed")
 
 
 @router.post("/tts/clips")
@@ -243,8 +266,10 @@ async def tts_clips(req: ClipsRequest, request: Request):
     for t in req.texts[:MAX_TEXTS]:
         if isinstance(t, str) and t.strip() and len(t) <= MAX_CHARS and t not in texts:
             texts.append(t)
-    client = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-              or (request.client.host if request.client else "?"))
+    # The RIGHTMOST X-Forwarded-For hop is the one Cloud Run appended (the caller's real address); every
+    # hop left of it is whatever the caller chose to send.
+    hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+    client = hops[-1] if hops else (request.client.host if request.client else "?")
     allowed = _client_allows(client, len(texts))
     results = await asyncio.gather(*[_clip(vt, t, may_synthesise=allowed) for t in texts])
     clips, counts = [], {"memory": 0, "bucket": 0, "synthesised": 0, "failed": 0}
