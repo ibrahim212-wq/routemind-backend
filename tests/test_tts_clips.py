@@ -167,7 +167,10 @@ def test_a_cancelled_first_askers_clip_is_still_kept(client):
     async def run():
         vt = tc.voice_tuple(tc.Voice(**ANDROID))
         first = asyncio.ensure_future(tc._clip(vt, "Turn left onto Kept Street."))
-        await asyncio.sleep(0)
+        for _ in range(200):               # cancel only once the synthesis is actually on the wire
+            if any(t == "Turn left onto Kept Street." for _, t in client.calls):
+                break
+            await asyncio.sleep(0.001)
         first.cancel()
         await asyncio.sleep(0.05)          # the synthesis still lands
         return tc._mem.get(tc.clip_key(vt, "Turn left onto Kept Street."))
