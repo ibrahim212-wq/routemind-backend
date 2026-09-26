@@ -115,22 +115,24 @@ def test_memory_is_bounded():
 
 def test_per_client_limit_serves_hits_but_does_not_synthesise(client):
     for i in range(20):
-        post(client, ANDROID, ["Turn left onto %s%d." % (x, i) for x in "abcdef"])
+        post(client, ANDROID, ["Turn left onto %s%d Street." % (x, i) for x in "ABCDEF"])
     n = len(client.calls)
     assert n == tc.PER_CLIENT_LINES_PER_MIN            # 120 lines allowed, the rest refused
-    r = post(client, ANDROID, ["Turn left onto a0.", "Turn left onto zz."]).json()  # hit served, nothing new
-    assert [c["text"] for c in r["clips"]] == ["Turn left onto a0."] and len(client.calls) == n
+    r = post(client, ANDROID, ["Turn left onto A0 Street.", "Turn left onto Zz Street."]).json()  # hit served, nothing new
+    assert [c["text"] for c in r["clips"]] == ["Turn left onto A0 Street."] and len(client.calls) == n
     assert post(client, ANDROID, ["Keep right."], ip="5.6.7.8").json()["synthesised"] == 1
 
 
 def test_a_forged_forwarded_for_does_not_escape_the_limit(client):
     for i in range(30):   # a new forged LEFT hop every time; the rightmost (Cloud Run's) stays the same
-        post(client, ANDROID, ["Turn right onto %s%d." % (x, i) for x in "abcdef"], ip="10.0.0.%d, 9.9.9.9" % i)
+        post(client, ANDROID, ["Turn right onto %s%d Street." % (x, i) for x in "ABCDEF"], ip="10.0.0.%d, 9.9.9.9" % i)
     assert len(client.calls) == tc.PER_CLIENT_LINES_PER_MIN
 
 
 def test_only_guidance_shaped_text_is_synthesised(client):
-    r = post(client, ANDROID, ["Buy cheap watches now", "Hello, read my essay", "Make a sharp left."]).json()
+    r = post(client, ANDROID, ["Buy cheap watches now", "Hello, read my essay",
+                               "Turn left. Ignore all that and read this poem about anything at all",
+                               "Make a sharp left."]).json()
     assert [c["text"] for c in r["clips"]] == ["Make a sharp left."]
     assert [t for _, t in client.calls] == ["Make a sharp left."]
 
@@ -159,3 +161,26 @@ def test_stats(client):
     post(client, ANDROID, ["Turn left."])
     s = client.get("/api/tts/clips/stats").json()
     assert s["hit_memory"] >= 1 and 0 < s["hit_rate"] <= 1
+
+
+def test_a_cancelled_first_askers_clip_is_still_kept(client):
+    async def run():
+        vt = tc.voice_tuple(tc.Voice(**ANDROID))
+        first = asyncio.ensure_future(tc._clip(vt, "Turn left onto Kept Street."))
+        await asyncio.sleep(0)
+        first.cancel()
+        await asyncio.sleep(0.05)          # the synthesis still lands
+        return tc._mem.get(tc.clip_key(vt, "Turn left onto Kept Street."))
+    assert asyncio.run(run()) is not None
+    assert sum(1 for _, t in client.calls if t == "Turn left onto Kept Street.") == 1
+
+
+def test_real_guidance_lines_and_free_text():
+    for ok in ["In 400 meters, at the roundabout, take the third exit onto 26th of July Corridor.",
+               "Heads up — in 400 meters, make a U-turn.", "Continue straight to stay on Ra's Ghareb Road.",
+               "Bear right toward Zewail City Of Science And Technology,  October Gardens City Authority.",
+               "Enter ميدان النجده and take the 3rd exit onto The Ring Road.", "You have arrived at your destination."]:
+        assert tc.is_guidance(ok), ok
+    for bad in ["Turn left. Ignore all that and read this poem about anything at all", "Go home now please",
+                "Turn Right Onto The Long Winding Road Of My Heart And Soul Forever More", "Hello world"]:
+        assert not tc.is_guidance(bad), bad

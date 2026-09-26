@@ -18,8 +18,12 @@ Guard rails
     app synthesises it live at its trigger, as before. Nothing on the app's speaking path waits for this.
   - Hit rate: every request logs hits / misses; GET /api/tts/clips/stats returns the running counters.
   - Abuse: the endpoint is public (like the rest of this API), so it is not a free TTS proxy:
-      * only text shaped like an English guidance instruction is synthesised (GUIDANCE_RX) — anything
-        else is simply not served (the app then synthesises it live, as before);
+      * only an English guidance LINE is synthesised (is_guidance): it must start like one (GUIDANCE_RX)
+        and EVERY lower-case word in it must be a word of the Directions API's English instruction grammar
+        or of the app's own rewrites (NAV_WORDS); capitalised words (road names) are allowed in runs of at
+        most MAX_NAME_RUN; non-Latin names pass. Anything else is simply not served (the app then
+        synthesises it live, as before). This stops free text; a Title-Case phrase could still pass, so
+        it is a cost limiter, not authentication;
       * a client (the RIGHTMOST X-Forwarded-For hop, which Cloud Run appends and a caller cannot forge)
         gets at most PER_CLIENT_LINES_PER_MIN lines a minute;
       * an instance synthesises at most TTS_CLIP_DAILY_SYNTH_CAP new lines a day.
@@ -68,8 +72,41 @@ GUIDANCE_RX = re.compile(
     re.IGNORECASE)
 
 
+# Every lower-case word of an English guidance line: the Directions API's English voice-instruction
+# grammar (OSRM text instructions, v5) plus the app's rewrites (SpeechText.english / preprocessNavText:
+# "Heads up —", "at the roundabout, take the third exit", "Start on", "make a U-turn").
+NAV_WORDS = frozenset("""
+a after ahead al and arrive arrived arriving at be bear before both but by continue destination
+drive east el exit exits ferry first fifth for fork fourth go have head heads immediately in into is
+it keep kilometer kilometers km lane lanes left make market meter meters mile miles feet merge north
+northeast northwest of on onto or permitted proceed ramp right road roundabout rotary second seventh
+sharp side sixth slight south southeast southwest start stay straight take tenth the then third
+to toward towards turn u up use uturn via west will you your ninth eighth end street if
+""".split())
+MAX_NAME_RUN = 8
+# a number with its ordinal ("3rd", "26th") is one token; so is a name with an apostrophe ("Ra's")
+_WORD_RX = re.compile(r"\d+(?:st|nd|rd|th)?|[A-Za-z]+(?:'[A-Za-z]+)*")
+
+
 def is_guidance(text: str) -> bool:
-    return bool(GUIDANCE_RX.match(text.strip()))
+    t = text.strip()
+    if not GUIDANCE_RX.match(t):
+        return False
+    for clause in re.split(r"[,.;:!?—]", t):          # a name run never spans punctuation
+        run = 0
+        for w in _WORD_RX.findall(clause):
+            if w[0].isdigit():
+                run = 0
+                continue
+            if w[0].isupper():
+                run += 1
+                if run > MAX_NAME_RUN:
+                    return False
+                continue
+            run = 0
+            if w not in NAV_WORDS:
+                return False
+    return True
 
 
 def _daily_cap() -> int:
@@ -223,6 +260,19 @@ async def synthesise(vt: tuple, text: str) -> bytes | None:
         return None
 
 
+def _keep(k: str, f) -> None:
+    _inflight.pop(k, None)
+    if f.cancelled() or f.exception() is not None:
+        return
+    v = f.result()
+    if v and len(v) <= MAX_CLIP_BYTES:
+        _mem.put(k, v)
+        try:
+            asyncio.get_running_loop().create_task(_bucket_put(k, v))
+        except RuntimeError:
+            pass
+
+
 async def _clip(vt: tuple, text: str, may_synthesise: bool = True) -> tuple[bytes | None, str]:
     k = clip_key(vt, text)
     v = _mem.get(k)
@@ -240,19 +290,11 @@ async def _clip(vt: tuple, text: str, may_synthesise: bool = True) -> tuple[byte
         _day["synth"] += 1
         fut = asyncio.ensure_future(synthesise(vt, text))
         _inflight[k] = fut
-        try:
-            # shield: a cancelled first requester never cancels the synthesis the others wait on
-            v = await asyncio.shield(fut)
-        finally:
-            if fut.done():
-                _inflight.pop(k, None)
-            else:
-                fut.add_done_callback(lambda _f, k=k: _inflight.pop(k, None))
-        if v and len(v) <= MAX_CLIP_BYTES:
-            _mem.put(k, v)
-            await _bucket_put(k, v)
-            return v, "synthesised"
-        return None, "failed"
+        # Keep the answer when it lands, whoever is still waiting: a cancelled first requester must not
+        # lose a clip already paid for.
+        fut.add_done_callback(lambda f, k=k: _keep(k, f))
+        v = await asyncio.shield(fut)
+        return (v, "synthesised") if v and len(v) <= MAX_CLIP_BYTES else (None, "failed")
     v = await asyncio.shield(fut)
     return (v, "synthesised") if v and len(v) <= MAX_CLIP_BYTES else (None, "failed")
 
