@@ -154,3 +154,15 @@ def test_round4_tatweel_spelling_variants_abbreviations_placeholders_lam():
     once = ps.scrub("Go to Place now", {"Place"}, "en")
     assert ps.scrub(once, {"Place"}, "en") == once
     assert ps.google_names("find_places", {"places": [{"name": "Car Wash"}, {"name": "سوبر ماركت"}]}) == set()
+
+
+def test_round5_stacked_proclitics_tatweels_and_no_collateral():
+    assert ps.scrub("روح لـZooba ولـZooba", {"Zooba"}, "ar") == "روح المكان ده المكان ده"
+    assert ps.scrub("وبالعزبي", {"العزبي"}, "ar") == "المكان ده"
+    assert ps.scrub("روح لــZooba", {"Zooba"}, "ar") == "روح المكان ده"
+    assert ps.scrub("روح لـ Zooba", {"Zooba"}, "ar") == "روح المكان ده"
+    # a name inside the placeholder only as a substring is still a name
+    assert ps.scrub("Ace Hardware is open", {"Ace Hardware"}, "en") == "that place is open"
+    # ى/ي only at a word's end, never on a short one-word form: «على» survives a place named «علي»
+    assert ps.scrub("على اليمين", {"علي"}, "ar") == "على اليمين"
+    assert ps.scrub("روح صيدلية العزبى", {"صيدلية العزبي"}, "ar") == "روح المكان ده"

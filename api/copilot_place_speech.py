@@ -53,7 +53,7 @@ _GENERIC = frozenset({
     "bank", "atm", "market", "supermarket", "restaurant", "station", "gas", "fuel", "petrol", "parking", "garage",
     "hotel", "school", "mosque", "church", "center", "centre", "city", "street", "road", "gate", "no", "building",
     "bldg", "branch", "the", "of", "and", "el", "al", "new", "old", "dr", "st", "mr", "mrs", "eng", "co",
-    "car", "wash", "bakery", "gym", "kiosk", "laundry", "police", "super", "shop", "salon", "barber",
+    "car", "wash", "bakery", "gym", "kiosk", "laundry", "police", "super", "salon", "barber",
     "مول", "كافيه", "كافي", "قهوه", "صيدليه", "مستشفي", "عياده", "بنك", "سوبرماركت", "ماركت", "مطعم", "محطه",
     "بنزين", "بنزينه", "جراج", "فندق", "مدرسه", "مسجد", "جامع", "كنيسه", "مركز", "شارع", "طريق", "بوابه", "رقم",
     "فرع", "مبني", "مدينه", "جديد", "قديم", "سوبر", "مخبز", "فرن", "كشك", "بقاله", "مغسله", "محل", "ورشه",
@@ -92,7 +92,10 @@ _NOTE = (" Descriptive place content (ratings, reviews, hours, phone, address) i
 _SHOWN_RX = re.compile(r"\[Shown:\s*([^\]]*)\]")
 _SHOWN_ITEM_RX = re.compile(r"(?:^|,)\s*\d+[.)]\s*")
 # A proclitic, optionally followed by a tatweel («لـZooba», «الـCity Stars»).
-_PROCLITIC = r"(?:(?:وال|بال|فال|لل|ال|و|ب|ف|ل)ـ?)?"
+# Stacked like Arabic writes them («ولـZooba», «وبالعزبي», «فلـ…»), a tatweel (one or more, then an optional
+# space) after them.
+_TATWEEL = r"(?:ـ+\s?)?"
+_PROCLITIC = r"(?:(?:[وف]?(?:بال|لل|ال|ب|ل)|و|ف)" + _TATWEEL + r")?"
 
 
 def place_content_spoken() -> bool:
@@ -189,17 +192,32 @@ def _usable(x: str) -> bool:
     not part of a placeholder (which the emitter's second pass would scrub again)."""
     if len(x) < 3 or _generic(x) or re.fullmatch(r"\w{1,4}\.", x):
         return False
-    xl = x.lower()
-    return not any(xl in ph.lower() for ph in _PLACEHOLDER.values())
+    # dropped only when it matches as a whole word INSIDE a placeholder («مكان», "Place"), not a mere substring
+    rx = re.compile(r"(?<!\w)" + _PROCLITIC + _form_rx(x) + r"(?!\w)", re.IGNORECASE)
+    return not any(rx.search(ph) for ph in _PLACEHOLDER.values())
 
 
 _EQUIV = {"ة": "[ةه]", "ه": "[ةه]", "ى": "[ىي]", "ي": "[ىي]", "أ": "[أإآا]", "إ": "[أإآا]", "آ": "[أإآا]",
           "ا": "[أإآا]"}
 
 
+_END_ONLY = frozenset("ةهىي")
+
+
 def _form_rx(f: str) -> str:
-    """A form as a regex that also matches the common Arabic spelling variants (ة/ه, ى/ي, أ/إ/آ/ا)."""
-    return "".join(_EQUIV.get(c, re.escape(c)) for c in f)
+    """A form as a regex that also matches the common Arabic spelling variants: أ/إ/آ/ا anywhere, ة/ه and ى/ي
+    only at the END of a word (where the variation lives — «على» is not «علي»); a one-word form under 4 letters
+    is matched exactly."""
+    if " " not in f and len(f) < 4:
+        return re.escape(f)
+    out = []
+    for i, c in enumerate(f):
+        at_end = i == len(f) - 1 or not f[i + 1].isalpha()
+        if c in _END_ONLY and not at_end:
+            out.append(re.escape(c))
+        else:
+            out.append(_EQUIV.get(c, re.escape(c)))
+    return "".join(out)
 
 
 @lru_cache(maxsize=64)
@@ -212,9 +230,9 @@ def _pattern(names: frozenset, lang: str):
             alts.append((len(f), _PROCLITIC + _form_rx(f)))
             if f.startswith("ال") and len(f) > 3:
                 rest = f[2:]
-                alts.append((len(f), r"(?:و|ف)?للـ?" + _form_rx(rest)))
+                alts.append((len(f), r"(?:و|ف)?لل" + _TATWEEL + _form_rx(rest)))
                 if rest.startswith("ل"):               # «اللبان» after ل is «للبان», not «لللبان»
-                    alts.append((len(f), r"(?:و|ف)?لـ?" + _form_rx(rest)))
+                    alts.append((len(f), r"(?:و|ف)?ل" + _TATWEEL + _form_rx(rest)))
     if not alts:
         return None
     alts.sort(key=lambda a: -a[0])
