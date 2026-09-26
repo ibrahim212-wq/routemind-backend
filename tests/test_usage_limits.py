@@ -50,7 +50,7 @@ def test_user_key_prefers_the_device_id_and_falls_back_to_the_address():
     assert ul.user_key({"x-routemind-device": "3f2c1d7e-aaaa-bbbb-cccc-1234567890ab"}, "1.2.3.4") \
         == "dev:3f2c1d7e-aaaa-bbbb-cccc-1234567890ab"
     assert ul.user_key({}, "1.2.3.4", device_id="abcdefgh12") == "dev:abcdefgh12"
-    assert ul.user_key({"x-forwarded-for": "9.9.9.9, 10.0.0.1"}, "10.0.0.2") == "ip:9.9.9.9"
+    assert ul.user_key({"x-forwarded-for": "9.9.9.9, 10.0.0.1"}, "10.0.0.2") == "ip:10.0.0.1"
     assert ul.user_key({"x-routemind-device": "short"}, "10.0.0.2") == "ip:10.0.0.2"
 
 

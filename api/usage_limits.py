@@ -6,8 +6,8 @@ repo).
   Plan-a-Drive plans (plan-drive-stream) ≤ PLANS_PER_DAY        (default 10) per user per Cairo day
 
 The user is the app's device id (the `X-RouteMind-Device` header — the same UUID the app registers with its FCM
-token); an old client without it is keyed by its address (the first X-Forwarded-For hop), which is weaker but
-never unlimited. Deterministic fast-path turns (mute, repeat, volume, thanks, facts) cost nothing and are NOT
+token); an old client without it is keyed by its address, which is weaker but
+never unlimited (the rightmost X-Forwarded-For hop — the one the platform appended). Deterministic fast-path turns (mute, repeat, volume, thanks, facts) cost nothing and are NOT
 counted — only a turn that calls the model is.
 
 The counters live in this instance's memory (like tts_clips' daily cap): with N Cloud Run instances a user can
@@ -76,5 +76,7 @@ def user_key(headers: Mapping[str, str], client_host: Optional[str], device_id: 
     dev = (device_id or headers.get(DEVICE_HEADER) or "").strip()
     if 8 <= len(dev) <= 64:
         return "dev:" + dev
-    fwd = (headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    # The RIGHTMOST hop is the one Cloud Run's front end appended (the caller cannot forge it; the leftmost
+    # can) — the same choice as api/tts_clips.py.
+    fwd = (headers.get("x-forwarded-for") or "").split(",")[-1].strip()
     return "ip:" + (fwd or client_host or "unknown")

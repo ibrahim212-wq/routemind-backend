@@ -53,8 +53,8 @@ from api.copilot_fastpath import try_fastpath, match_action, match_ack
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
 from api.usage_limits import COPILOT_TURNS, copilot_turns_per_day
-from api.copilot_place_speech import (PLACE_SPEECH_RULE, context_for_model, for_model,
-                                      place_content_spoken)
+from api.copilot_place_speech import (context_names, for_model, names_in, names_in_history,
+                                      place_content_spoken, rule as place_speech_rule, scrub)
 
 logger = logging.getLogger("routemind.copilot.v2")
 
@@ -1148,7 +1148,7 @@ class _Emitter:
     path that wants to put text in front of the driver has no other way to
     do it — tests/test_copilot_emitter.py fails if one appears."""
 
-    __slots__ = ("lang", "arabizi", "emitted", "spoke", "_seen", "fixes", "drops")
+    __slots__ = ("lang", "arabizi", "emitted", "spoke", "_seen", "fixes", "drops", "unspoken")
 
     def __init__(self, lang: str, arabizi: bool = False):
         self.lang = lang
@@ -1158,6 +1158,8 @@ class _Emitter:
         self._seen: set = set()
         self.fixes = 0
         self.drops = 0
+        # Google place names this turn has seen, never spoken (api/copilot_place_speech.py).
+        self.unspoken: set = set()
 
     @staticmethod
     def _line(obj: Dict) -> str:
@@ -1183,6 +1185,10 @@ class _Emitter:
                 logger.error("copilot gate: DROPPED a sentence that could not "
                              f"be brought to {self.lang}")
                 self.drops += 1
+                return []
+        if self.unspoken:
+            text = scrub(text, self.unspoken, self.lang)
+            if not text:
                 return []
         key = _norm_sentence(text)
         if len(key) >= _DEDUP_MIN_CHARS:
@@ -1287,19 +1293,23 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         return
 
     lang_rule = _lang_rule(lang, res.arabizi, res.unreliable)
-    # The model never receives Google place content unless the flag says it may be spoken
-    # (api/copilot_place_speech.py): the context's destination / stop names and the place tools' results.
-    ctx_block = _format_context_v2(context_for_model(ctx))
+    # Google place content is never SPOKEN unless the flag says so (api/copilot_place_speech.py): the
+    # descriptive content never reaches the model, and every place name this turn has seen is scrubbed out of
+    # the spoken text by the one output gate.
+    if not place_content_spoken():
+        em.unspoken |= context_names(ctx)
+        em.unspoken |= names_in(req.pending_action or {})
+        em.unspoken |= names_in_history(history)
+    ctx_block = _format_context_v2(ctx)
     pending = ""
     if req.pending_action:
         pending = ("\n[Pending action awaiting user confirmation]\n"
-                   + json.dumps(req.pending_action, ensure_ascii=False))
+                   + json.dumps(for_model("pending_action", req.pending_action), ensure_ascii=False))
 
     messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_V2}]
     messages += history[:-1]
     messages.append({"role": "system", "content": "LANGUAGE: " + lang_rule})
-    if not place_content_spoken():
-        messages.append({"role": "system", "content": PLACE_SPEECH_RULE})
+    messages += place_speech_rule()
     messages.append({"role": "user",
                      "content": f"{user_text}\n\n{ctx_block}{pending}"})
 
@@ -1391,6 +1401,8 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                     if action and action.get("requires_confirm") and confirm_used:
                         # authoritative cap: never two pending confirmations
                         result_obj, action = blocked_note, None
+                if not place_content_spoken():
+                    em.unspoken |= names_in(result_obj) | names_in(action or {})
                 if action:
                     if action.get("requires_confirm"):
                         confirm_used = True
