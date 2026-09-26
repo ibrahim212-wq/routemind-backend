@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Set
 
 # Tools whose results carry Google place content.
@@ -43,14 +44,36 @@ _CONTENT_KEYS = frozenset({"rating", "reviews", "price", "open_now", "hours", "e
 # words — and never `via` outside reroute_via — elsewhere it is a Mapbox road summary).
 _NAME_KEYS = frozenset({"name", "place", "new_destination", "others", "other_candidates", "found_name"})
 
-# Our own labels and single generic words: never scrubbed.
-_NEVER = frozenset({
-    "home", "work", "البيت", "الشغل", "بيت", "شغل",
-    "total", "mobil", "shell", "mall", "cafe", "café", "coffee", "pharmacy", "hospital", "clinic", "bank", "atm",
-    "market", "restaurant", "station", "gas", "fuel", "parking", "hotel", "school", "mosque", "church", "center",
-    "centre", "city", "street", "road", "مول", "كافيه", "قهوة", "صيدلية", "مستشفى", "عيادة", "بنك", "سوبرماركت",
-    "مطعم", "محطة", "بنزينة", "جراج", "فندق", "مدرسة", "مسجد", "جامع", "كنيسة", "مركز", "شارع", "طريق",
+# Our own labels, generic words and joiners (normalized: no leading ال, ة→ه, ى→ي, أإآ→ا). A name or a variant
+# whose EVERY word is in here (or that has no letter at all) is never scrubbed: "Total", "Gas Station",
+# «محطة بنزين», "Gate No. 5" → "5".
+_GENERIC = frozenset({
+    "home", "work", "بيت", "شغل",
+    "total", "mobil", "shell", "mall", "cafe", "café", "coffee", "shop", "store", "pharmacy", "hospital", "clinic",
+    "bank", "atm", "market", "supermarket", "restaurant", "station", "gas", "fuel", "petrol", "parking", "garage",
+    "hotel", "school", "mosque", "church", "center", "centre", "city", "street", "road", "gate", "no", "building",
+    "bldg", "branch", "the", "of", "and", "el", "al", "new", "old",
+    "مول", "كافيه", "كافي", "قهوه", "صيدليه", "مستشفي", "عياده", "بنك", "سوبرماركت", "ماركت", "مطعم", "محطه",
+    "بنزين", "بنزينه", "جراج", "فندق", "مدرسه", "مسجد", "جامع", "كنيسه", "مركز", "شارع", "طريق", "بوابه", "رقم",
+    "فرع", "مبني", "مدينه", "جديد", "قديم",
 })
+
+_LETTER_RX = re.compile(r"[^\W\d_]+")
+
+
+def _norm_word(w: str) -> str:
+    w = w.lower().strip(".")
+    for a, b in (("أ", "ا"), ("إ", "ا"), ("آ", "ا"), ("ة", "ه"), ("ى", "ي")):
+        w = w.replace(a, b)
+    if w.startswith("ال") and len(w) > 3:
+        w = w[2:]
+    return w
+
+
+def _generic(s: str) -> bool:
+    words = _LETTER_RX.findall(s)
+    return not words or all(_norm_word(w) in _GENERIC for w in words)
+
 
 _PLACEHOLDER = {"en": "that place", "ar": "المكان ده"}
 
@@ -58,7 +81,8 @@ PLACE_SPEECH_RULE = (
     "SPEAKING PLACES: never say a place's name, rating, reviews, price, opening hours, phone or address — they "
     "come from Google and are shown on the screen, never spoken. Say how many you found and refer to them by "
     "order and distance (\"the first one, 2 km ahead\"); for details, say they're on the screen. You may still "
-    "pass a place's name or id to a tool.")
+    "pass a place's name or id to a tool. A yes/no about a place asks about \"the place shown on the screen\"; "
+    "if what you found may not be what they asked for, say so and ask them to check the screen first.")
 
 _NOTE = (" Descriptive place content (ratings, reviews, hours, phone, address) is on the screen and is never "
          "spoken; never say place names either — refer to places by order and distance.")
@@ -93,7 +117,7 @@ def _strip(v: Any) -> Any:
 def _add(out: Set[str], s: Any) -> None:
     if isinstance(s, str):
         s = s.strip()
-        if len(s) >= 3 and s.lower() not in _NEVER:
+        if len(s) >= 3 and not _generic(s):
             out.add(s)
     elif isinstance(s, list):
         for x in s:
@@ -137,32 +161,49 @@ def names_in_history(messages: Iterable[Dict[str, Any]]) -> Set[str]:
 
 
 def _variants(name: str, lang: str) -> Set[str]:
+    """The name, its leading segment ("Carrefour - Maadi" → "Carrefour"), the parts around an abbreviation
+    ("Dr. Hamdy Clinic" → "Hamdy Clinic") and, for Arabic turns, their Egyptian-verbalized forms — never a variant
+    without a letter or made only of generic words (a bare "12" would scrub a spoken ETA)."""
     v = {name}
     lead = re.split(r"\s+[-|–—]\s+|\s*[,(]\s*", name)[0].strip()
-    if lead != name and len(lead.split()) >= 1:
+    if lead != name:
         v.add(lead)
-    for part in re.split(r"(?<=\.)\s+", name):           # "Dr. Hamdy Clinic" → "Dr.", "Hamdy Clinic"
+    for part in re.split(r"(?<=\.)\s+", name):
         if part != name:
             v.add(part.strip())
+    v = {x for x in v if len(x) >= 3 and not _generic(x)}
     if lang == "ar":
         try:
             from api.copilot_egy import masri
-            v |= {masri(x) for x in list(v)}
+            v |= {m for m in (masri(x) for x in v) if len(m) >= 3 and not _generic(m)}
         except Exception:  # pragma: no cover
             pass
-    return {x for x in v if len(x) >= 3 and x.lower() not in _NEVER and not re.fullmatch(r"\w{1,3}\.", x)}
+    return v
+
+
+@lru_cache(maxsize=64)
+def _pattern(names: frozenset, lang: str):
+    """ONE alternation over every form (longest first), so a placeholder is never scrubbed again; a form that
+    starts with «ال» also matches after the preposition ل («للعزبي» = ل + العزبي)."""
+    alts = []
+    for n in names:
+        for f in _variants(n, lang):
+            alts.append((len(f), _PROCLITIC + re.escape(f)))
+            if f.startswith("ال") and len(f) > 3:
+                alts.append((len(f), r"(?:و|ف)?لل" + re.escape(f[2:])))
+    if not alts:
+        return None
+    alts.sort(key=lambda a: -a[0])
+    return re.compile(r"(?<!\w)(?:" + "|".join(a for _, a in alts) + r")(?!\w)", re.IGNORECASE)
 
 
 def scrub(text: str, names: Iterable[str], lang: str) -> str:
     """`text` with every name (and its variants) replaced by a neutral reference: whole words only, an Arabic
-    proclitic allowed in front, longest first, case-insensitive."""
-    ph = _PLACEHOLDER.get(lang, _PLACEHOLDER["en"])
-    forms: Set[str] = set()
-    for n in set(names):
-        forms |= _variants(n, lang)
-    for f in sorted(forms, key=len, reverse=True):
-        rx = r"(?<!\w)" + _PROCLITIC + re.escape(f) + r"(?!\w)"
-        text = re.sub(rx, ph, text, flags=re.IGNORECASE)
+    proclitic allowed in front, one pass (compiled once per set of names)."""
+    rx = _pattern(frozenset(n for n in names if n), lang)
+    if rx is None:
+        return text
+    text = rx.sub(_PLACEHOLDER.get(lang, _PLACEHOLDER["en"]), text)
     return re.sub(r"\s{2,}", " ", text).strip()
 
 

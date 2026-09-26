@@ -117,5 +117,26 @@ def test_a_not_found_reply_keeps_what_the_user_asked_for(monkeypatch):
 
 def test_the_egyptian_form_of_a_name_is_scrubbed_too():
     from api.copilot_egy import masri
-    assert ps.scrub(masri("روح مول 26 على طول"), {"مول 26"}, "ar") == "روح المكان ده على طول"
+    assert ps.scrub(masri("روح بلازا 26 على طول"), {"بلازا 26"}, "ar") == "روح المكان ده على طول"
     assert ps.scrub(masri("روح Cilantro Maadi"), {"Cilantro Maadi"}, "ar") == "روح المكان ده"
+
+
+def test_round3_lam_alif_numbers_generic_phrases_one_pass():
+    from api.copilot_egy import masri
+    # ل + ال: «للعزبي»
+    assert ps.scrub("روح للعزبي", {"العزبي"}, "ar") == "روح المكان ده"
+    assert ps.scrub("هوديك وللعزبي", {"العزبي"}, "ar") == "هوديك المكان ده"
+    # a number-only variant never scrubs an ETA
+    assert ps.scrub(masri("هتوصل بعد 12 دقيقة"), {"Bldg. 12"}, "ar") == masri("هتوصل بعد 12 دقيقة")
+    assert ps.scrub("arrive in 5 minutes", {"Gate No. 5"}, "en") == "arrive in 5 minutes"
+    # generic phrases (and Egyptian spellings) are never names
+    assert ps.google_names("find_places", {"places": [{"name": "Gas Station"}, {"name": "محطة بنزين"},
+                                                       {"name": "صيدليه"}]}) == set()
+    assert ps.scrub("I found a gas station 2 km ahead", {"Gas Station - Wataniya"}, "en") \
+        == "I found a gas station 2 km ahead"
+    # one pass: the placeholder is never scrubbed again
+    assert ps.scrub("The Place is near", {"The Place", "Place"}, "en") == "that place is near"
+
+
+def test_the_users_own_words_in_a_not_found_result_are_not_collected():
+    assert ps.google_names("call_place", {"found": False, "requested": "ماما"}) == set()

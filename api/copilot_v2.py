@@ -841,7 +841,7 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
                       "requires_confirm": True, "commit": "confirm"}
             weak = bool(q) and base._name_match(q, place.get("name") or "") != "strong"
             note = ("PREVIEW ONLY — the trip still heads to the old destination until they confirm. ONE yes/no "
-                    + ("naming the new destination." if place_content_spoken() else
+                    + ("naming the new destination." if place_content_spoken() or name == "navigate_saved" else
                        "about the new destination shown on the screen — never say its name."
                        + (" It does NOT plainly match what they asked for: say so and ask them to check the "
                           "screen first." if weak else "")))
@@ -961,7 +961,7 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
             det = await base.place_details_rich(pid) if pid else None
             phone = (det or {}).get("phone")
             if not phone:
-                return {"found": False, "place": target,
+                return {"found": False, "requested": target,
                         "note": "No phone number is listed for that place — "
                                 "say so honestly."}, None
             found_name = (det or {}).get("name", target)

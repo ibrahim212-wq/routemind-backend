@@ -1108,7 +1108,7 @@ async def _execute_tool(name: str, args: Dict[str, Any],
             via = args.get("via", "")
             place = await _resolve_place(ctx, via)
             if not place:
-                return {"found": False, "via": via}, None
+                return {"found": False, "requested": via}, None
             action = {"type": "reroute_via", "point": place,
                       "requires_confirm": True, "commit": "confirm"}
             result = {"found": True, "via": place["name"], "commit": "confirm",
