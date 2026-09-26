@@ -53,7 +53,7 @@ from api.copilot_fastpath import try_fastpath, match_action, match_ack
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
 from api.usage_limits import COPILOT_TURNS, copilot_turns_per_day
-from api.copilot_place_speech import (context_names, for_model, names_in, names_in_history,
+from api.copilot_place_speech import (for_model, google_names, names_in_history,
                                       place_content_spoken, rule as place_speech_rule, scrub)
 
 logger = logging.getLogger("routemind.copilot.v2")
@@ -815,6 +815,7 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
                     "commit": "done"}
 
         if name in ("navigate_saved", "change_destination"):
+            q = ""
             if name == "navigate_saved":
                 which = args.get("place") or "home"
                 saved = (ctx.get("saved_places") or {}).get(which)
@@ -838,11 +839,14 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
                 place = hit
             action = {"type": "change_destination", "place": place,
                       "requires_confirm": True, "commit": "confirm"}
+            weak = bool(q) and base._name_match(q, place.get("name") or "") != "strong"
+            note = ("PREVIEW ONLY — the trip still heads to the old destination until they confirm. ONE yes/no "
+                    + ("naming the new destination." if place_content_spoken() else
+                       "about the new destination shown on the screen — never say its name."
+                       + (" It does NOT plainly match what they asked for: say so and ask them to check the "
+                          "screen first." if weak else "")))
             return {"found": True, "new_destination": place["name"],
-                    "commit": "confirm",
-                    "note": "PREVIEW ONLY — the trip still heads to the old "
-                            "destination until they confirm. ONE yes/no "
-                            "naming the new destination."}, action
+                    "commit": "confirm", "note": note}, action
 
         if name == "skip_next_stop":
             stops = ctx.get("stops") or []
@@ -964,9 +968,18 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
             # A phone call is a side effect the driver did not see coming
             # («اتصل بماما» once dialed a restaurant called "Mama dahab") →
             # PREVIEW: "Call <place>?" and the pill; the client dials on yes.
-            return {"found": True, "place": found_name, "commit": "confirm",
-                    "note": f"NOT dialing yet. Ask ONE short yes/no: call "
-                            f"{found_name}? Never say it's done."}, \
+            match = base._name_match(target, found_name)
+            if place_content_spoken():
+                note = f"NOT dialing yet. Ask ONE short yes/no: call {found_name}? Never say it's done."
+            else:
+                # The name is on the pill, not in the voice (cost Phase 4): the question points at the screen,
+                # and when the place found is not plainly the one asked for, the driver is told to look first.
+                note = ("NOT dialing yet. Ask ONE short yes/no to call the place shown on the screen — never say "
+                        "its name, never say it's done."
+                        + ("" if match == "strong" else " The place found does NOT plainly match what they asked "
+                           "for: say so first and ask them to check the name on the screen before answering."))
+            return {"found": True, "place": found_name, "commit": "confirm", "name_match": match,
+                    "note": note}, \
                    {"type": "dial", "number": phone, "place": found_name,
                     "requires_confirm": True, "commit": "confirm"}
 
@@ -1173,6 +1186,10 @@ class _Emitter:
         text = (text or "").strip()
         if not text:
             return []
+        if self.unspoken:                            # before masri changes a name's spelling …
+            text = scrub(text, self.unspoken, self.lang)
+            if not text:
+                return []
         if self.lang == "ar":
             text = masri(text)                       # Egyptian numbers/wording
         if not reply_lang_ok(text, self.lang):
@@ -1186,7 +1203,7 @@ class _Emitter:
                              f"be brought to {self.lang}")
                 self.drops += 1
                 return []
-        if self.unspoken:
+        if self.unspoken:                            # … and after it / a translation (their masri forms)
             text = scrub(text, self.unspoken, self.lang)
             if not text:
                 return []
@@ -1293,12 +1310,11 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         return
 
     lang_rule = _lang_rule(lang, res.arabizi, res.unreliable)
-    # Google place content is never SPOKEN unless the flag says so (api/copilot_place_speech.py): the
-    # descriptive content never reaches the model, and every place name this turn has seen is scrubbed out of
-    # the spoken text by the one output gate.
+    # Google place content is not SPOKEN unless the flag says so (api/copilot_place_speech.py): the
+    # descriptive content never reaches the model, and the Google place names this turn has seen (place tools,
+    # the pending action, the "[Shown: …]" cards) are scrubbed out of the spoken text by the one output gate.
     if not place_content_spoken():
-        em.unspoken |= context_names(ctx)
-        em.unspoken |= names_in(req.pending_action or {})
+        em.unspoken |= google_names("pending_action", req.pending_action or {})
         em.unspoken |= names_in_history(history)
     ctx_block = _format_context_v2(ctx)
     pending = ""
@@ -1402,7 +1418,7 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
                         # authoritative cap: never two pending confirmations
                         result_obj, action = blocked_note, None
                 if not place_content_spoken():
-                    em.unspoken |= names_in(result_obj) | names_in(action or {})
+                    em.unspoken |= google_names(tc["name"], result_obj, action or {})
                 if action:
                     if action.get("requires_confirm"):
                         confirm_used = True

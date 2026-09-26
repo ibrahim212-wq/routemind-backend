@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""The copilot never SPEAKS Google place content (api/copilot_place_speech.py; cost Phase 4, flagged).
+"""The copilot does not SPEAK Google place content (api/copilot_place_speech.py; cost Phase 4, flagged).
 
 With the flag off (the default): the model never receives a place's rating, reviews, summary, price, hours,
-phone or address; it keeps names and ids (so "add the second one" still names the right place to the tool); and
-the one output gate scrubs every Google place name the turn has seen — from tool results and actions, the trip
-context, the pending action and the "[Shown: …]" history — out of the spoken text. COPILOT_SPEAK_PLACE_CONTENT=1
-restores the previous behaviour.
+phone or address; it keeps names and ids (so "add the second one" still names the right place to the tool); the
+one output gate scrubs the Google place names the turn has seen (place tools, pending action, "[Shown: …]" cards)
+out of the spoken text — whole words, with their Egyptian form, leading segment and abbreviation parts — and never
+touches road names, what the user asked for, our labels, the destination / stops, or generic words.
+COPILOT_SPEAK_PLACE_CONTENT=1 restores the previous behaviour.
 
 Run:  python -m pytest tests/test_copilot_place_speech.py -q
 """
@@ -33,24 +34,35 @@ def test_the_model_keeps_names_and_ids_never_the_descriptive_content(monkeypatch
                              {"name": "Zooba", "id": "ChIJb", "detour_min": 3}]
     d = ps.for_model("place_details", DETAILS)
     assert set(d) == {"found", "place", "note"}
-    assert "never spoken" in d["note"]
     assert "number" not in ps.for_model("pending_action", {"type": "dial", "number": "010", "place": "X"})
 
 
-def test_names_are_collected_from_results_actions_context_and_history():
-    names = ps.names_in(FIND) | ps.names_in({"type": "add_stop", "place": {"name": "Zooba 2", "lat": 1}})
-    assert {"Café Riche", "Zooba", "Zooba 2"} <= names
-    ctx = {"dest_name": "Cloud 9 Mall", "stops": [{"name": "Wadi Degla"}],
-           "alternatives": [{"leg_to": "City Stars"}], "user_lat": 30.0}
-    assert ps.context_names(ctx) == {"Cloud 9 Mall", "Wadi Degla", "City Stars"}
-    assert ps.names_in({"dest_name": "Home"}) == set()          # our own labels are never scrubbed
-    hist = [{"role": "user", "content": "[Shown: 1. Café Riche, 2. Zooba]"}]
-    assert ps.names_in_history(hist) == {"Café Riche", "Zooba"}
+def test_names_come_only_from_google_sourced_fields():
+    assert ps.google_names("find_places", FIND) == {"Café Riche", "Zooba"}
+    assert ps.google_names("add_stop", {"found": False, "requested": "gas station",
+                                        "other_candidates": ["Wataniya Maadi"]}) == {"Wataniya Maadi"}
+    assert ps.google_names("reroute_via", {"via": "Zooba Zamalek"}) == {"Zooba Zamalek"}
+    # a route summary is a Mapbox road name, not a place
+    assert ps.google_names("avoid_jam", {"via": "Ring Road"}, {"via": "Ring Road"}) == set()
+    assert ps.google_names("switch_route", {"via": "26th of July Corridor"}) == set()
+    # our labels and single generic words never
+    assert ps.google_names("change_destination", {"new_destination": "Home"}) == set()
+    assert ps.google_names("find_places", {"places": [{"name": "Total"}, {"name": "Mall"}]}) == set()
+    hist = [{"role": "user", "content": "[Shown: 1. Total, Nasr City, 2. Zooba]"}]
+    assert ps.names_in_history(hist) == {"Total, Nasr City", "Zooba"}
 
 
-def test_scrub_replaces_names_in_both_languages():
+def test_scrub_whole_words_variants_and_both_languages():
     assert ps.scrub("Café Riche is 2 km ahead.", {"Café Riche"}, "en") == "that place is 2 km ahead."
     assert ps.scrub("كافيه ريش على بعد ٢ كيلو", {"كافيه ريش"}, "ar") == "المكان ده على بعد ٢ كيلو"
+    assert ps.scrub("روح لكافيه ريش", {"كافيه ريش"}, "ar") == "روح المكان ده"          # proclitic
+    # whole words only: a name inside another word is left alone
+    assert ps.scrub("Zoobaland is closed", {"Zooba"}, "en") == "Zoobaland is closed"
+    # the leading segment and the parts around an abbreviation
+    assert ps.scrub("Carrefour is ahead", {"Carrefour - Maadi City Center"}, "en") == "that place is ahead"
+    assert ps.scrub("Hamdy Clinic is open", {"Dr. Hamdy Clinic"}, "en") == "that place is open"
+    # a stop-listed name is never scrubbed
+    assert ps.scrub("In total there are 3 cameras", {"Total"}, "en") == "In total there are 3 cameras"
 
 
 def test_the_flag_restores_everything(monkeypatch):
@@ -68,25 +80,42 @@ def test_a_name_the_model_says_anyway_is_never_spoken(monkeypatch):
     monkeypatch.setattr(v2, "execute_tool_v2", fake_tool)
     script = [
         [("tool_calls", [{"id": "c1", "name": "find_places", "args": json.dumps({"query": "cafe"})}])],
-        [("delta", "I found two. Café Riche is the first one, 2 km ahead. Zooba is the second.")],
+        [("delta", "I found two. Café Riche is the first one, 2 km ahead. Zooba is the second, "
+                   "near the Ring Road.")],
     ]
     lines, calls = asyncio.run(run_turn(FakeReq("find me a cafe on the way",
                                                 ctx={"dest_name": "Cloud 9 Mall"}), script, monkeypatch))
     spoken = deltas(lines)
     assert "Café Riche" not in spoken and "Zooba" not in spoken
-    assert "2 km ahead" in spoken
-    # the model saw the names (for the next tool) but no rating, and the rule
+    assert "2 km ahead" in spoken and "Ring Road" in spoken
     sent = json.dumps(calls[-1]["messages"], ensure_ascii=False)
     assert "Café Riche" in sent and '"rating"' not in sent
     assert "SPEAKING PLACES" in sent
-    # the cards still carry everything
     assert [l for l in lines if l["t"] == "action"][0]["action"]["places"][0]["rating"] == 4.6
 
 
-def test_the_destination_name_is_scrubbed(monkeypatch):
+def test_traffic_speech_keeps_roads_areas_and_the_destination(monkeypatch):
     monkeypatch.delenv("COPILOT_SPEAK_PLACE_CONTENT", raising=False)
-    script = [[("delta", "You'll reach Cloud 9 Mall in 12 minutes.")]]
-    lines, _ = asyncio.run(run_turn(FakeReq("how long left", ctx={"dest_name": "Cloud 9 Mall"}), script,
-                                    monkeypatch))
-    assert "Cloud 9" not in deltas(lines)
-    assert "12 minutes" in deltas(lines)
+    script = [[("delta", "Heavy traffic on the Ring Road near Maadi; you'll reach Cloud 9 Mall in 12 minutes.")]]
+    ctx = {"dest_name": "Cloud 9 Mall", "alternatives": [{"via": "Ring Road", "leg_to": "Maadi"}]}
+    lines, _ = asyncio.run(run_turn(FakeReq("how is traffic", ctx=ctx), script, monkeypatch))
+    assert "Ring Road near Maadi" in deltas(lines)
+    assert "Cloud 9 Mall" in deltas(lines)
+
+
+def test_a_not_found_reply_keeps_what_the_user_asked_for(monkeypatch):
+    monkeypatch.delenv("COPILOT_SPEAK_PLACE_CONTENT", raising=False)
+
+    async def fake_tool(name, args, ctx):
+        return {"found": False, "requested": "gas station", "note": "Nothing nearby."}, None
+    monkeypatch.setattr(v2, "execute_tool_v2", fake_tool)
+    script = [[("tool_calls", [{"id": "c1", "name": "add_stop", "args": json.dumps({"query": "gas station"})}])],
+              [("delta", "I couldn't find a gas station nearby.")]]
+    lines, _ = asyncio.run(run_turn(FakeReq("add a gas station"), script, monkeypatch))
+    assert "gas station" in deltas(lines)
+
+
+def test_the_egyptian_form_of_a_name_is_scrubbed_too():
+    from api.copilot_egy import masri
+    assert ps.scrub(masri("روح مول 26 على طول"), {"مول 26"}, "ar") == "روح المكان ده على طول"
+    assert ps.scrub(masri("روح Cilantro Maadi"), {"Cilantro Maadi"}, "ar") == "روح المكان ده"
