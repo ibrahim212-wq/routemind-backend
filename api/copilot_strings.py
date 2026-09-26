@@ -27,6 +27,9 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "err_busy":     {"en": "One second, I'm a bit busy. Say that again?",
                      "ar": "ثانية واحدة، مشغول شوية. قول تاني؟"},
     "err_no_input": {"en": "I didn't catch that.", "ar": "مسمعتش. قول تاني؟"},
+    # The per-user daily limit (api/usage_limits.py) — spoken, in the turn's language.
+    "err_daily_limit": {"en": "That's today's limit for the assistant. It's back tomorrow.",
+                        "ar": "ده آخر حد للمساعد النهارده. هيرجع بكرة."},
     # A garbled / low-confidence transcript: confirm before acting.
     "unclear_ask":  {"en": "Say that once more?", "ar": "معلش، قولها تاني؟"},
     # Deterministic single-intent commands (no model in the loop): the ack.

@@ -50,7 +50,7 @@ import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -1254,10 +1254,14 @@ class ConverseRequest(BaseModel):
     # switch that is really a wrong-language microphone (see copilot_lang).
     stt_lang: Optional[str] = None       # "ar" | "en": the recognizer that heard it
     stt_confidence: Optional[float] = None
+    # The per-user daily limit's key (api/usage_limits.py): the app's device id, from the
+    # X-RouteMind-Device header (or this field); filled by the endpoint, never trusted for anything else.
+    device_id: Optional[str] = None
+    limit_key: Optional[str] = None
 
 
 @router.post("/copilot/converse")
-async def copilot_converse(req: ConverseRequest):
+async def copilot_converse(req: ConverseRequest, request: Request):
     """Streaming copilot turn. Always returns 200 + NDJSON; failures arrive as
     an in-stream error line (with a localized `spoken` text) so the client can
     speak a graceful fallback in the conversation's language.
@@ -1267,6 +1271,8 @@ async def copilot_converse(req: ConverseRequest):
     old or new, now gets the gated engine. (Unknown request fields such as
     the old `v2` flag are ignored by pydantic.)"""
     from api.copilot_v2 import stream_v2   # lazy: avoids an import cycle
+    from api.usage_limits import user_key
+    req.limit_key = user_key(request.headers, request.client.host if request.client else None, req.device_id)
     return StreamingResponse(stream_v2(req),
                              media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-cache",

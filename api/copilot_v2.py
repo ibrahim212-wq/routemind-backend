@@ -52,6 +52,7 @@ from api.copilot_lang import (resolve_language, reply_lang_ok, split_sentences)
 from api.copilot_fastpath import try_fastpath, match_action, match_ack
 from api.copilot_egy import masri
 from api.copilot_strings import t as S
+from api.usage_limits import COPILOT_TURNS, copilot_turns_per_day
 
 logger = logging.getLogger("routemind.copilot.v2")
 
@@ -1274,6 +1275,13 @@ async def stream_v2(req) -> AsyncGenerator[str, None]:
         for l in await em.delta(S("unclear_ask", lang)):
             yield l
         yield em.done(True)
+        return
+
+    # ── The per-user daily limit (api/usage_limits.py): only a turn that reaches the model counts ──
+    limit_key = getattr(req, "limit_key", None)
+    if limit_key and not COPILOT_TURNS.take(limit_key, copilot_turns_per_day()):
+        logger.info("copilot v2 daily limit reached")
+        yield em.error("daily_limit", "err_daily_limit")
         return
 
     lang_rule = _lang_rule(lang, res.arabizi, res.unreliable)

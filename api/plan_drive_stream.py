@@ -15,7 +15,7 @@ jam_display → bars + level للـ user (بيشمل DOW boost)
 
 import json
 import asyncio
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta, date
@@ -178,7 +178,13 @@ class PlanDriveStreamRequest(BaseModel):
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.post("/plan-drive-stream")
-async def plan_drive_stream(req: PlanDriveStreamRequest):
+async def plan_drive_stream(req: PlanDriveStreamRequest, request: Request):
+    # The per-user daily limit (api/usage_limits.py). A refusal is a 429 — the app then shows its
+    # Mapbox estimate for the day, as it does for any failure of this endpoint.
+    from api.usage_limits import PLANS, plans_per_day, user_key
+    key = user_key(request.headers, request.client.host if request.client else None)
+    if not PLANS.take(key, plans_per_day()):
+        raise HTTPException(status_code=429, detail={"error": "daily_limit"})
 
     async def generate():
         target_date = date.fromisoformat(req.target_date)
