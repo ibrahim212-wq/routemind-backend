@@ -82,6 +82,10 @@ def run_voice(monkeypatch, req, heard_text, conf=0.9, script=None, error=None, o
     return asyncio.run(go()), calls
 
 
+async def _collect(gen):
+    return [json.loads(l) async for l in gen]
+
+
 def said(lines):
     return "".join(l["text"] for l in lines if l["t"] == "delta").strip()
 
@@ -331,6 +335,61 @@ def test_a_refinement_is_the_models(monkeypatch, heard):
     _, calls = run_voice(monkeypatch, VoiceReq(prev_lang="ar", pending_action={"type": "add_stop"}), heard,
                          script=[[("delta", "تمام.")]])
     assert calls
+
+
+# ── Sekka on the car screen (no phone navigation behind it) ─────────────────────
+CAR_CAN = ["find_places", "place_details", "traffic_check", "weather", "switch_route", "show_alternatives",
+           "show_overview", "set_guidance_voice", "set_view_mode", "set_voice_volume", "repeat_instruction",
+           "report_incident", "remind_in", "remind_before_arrival", "emergency_call", "call_place",
+           "cancel_navigation"]
+
+
+def test_the_car_is_offered_only_what_it_can_do(monkeypatch):
+    seen = []
+
+    async def fake(messages, with_tools, tools=None):
+        seen.append(tools)
+        yield ("delta", "Okay.")
+        yield ("end", None)
+    monkeypatch.setattr(base, "_stream_chat", fake)
+    monkeypatch.setattr(base, "OPENAI_KEY", "sk-test")
+    req = VoiceReq(prev_lang="en", ctx={"surface": "car", "can": CAR_CAN},
+                   history=[{"role": "user", "content": "What is the weather like at the destination?"}])
+    asyncio.run(_collect(v2.stream_v2(req)))
+    names = {t["function"]["name"] for t in seen[0]}
+    assert names == set(CAR_CAN) & _tool_names()
+    assert "add_stop" not in names and "route_options" not in names
+    # the phone (no `can`) keeps every tool
+    assert len(v2.tools_for({})) == len(v2.TOOLS_V2)
+
+
+def test_a_tool_the_car_cannot_run_is_refused_not_executed(monkeypatch):
+    script = [[("tool_calls", [{"id": "c1", "name": "add_stop", "args": json.dumps({"query": "gas station"})}])],
+              [("delta", "That one is on the phone.")]]
+    fake, calls = scripted(script)
+    monkeypatch.setattr(base, "_stream_chat", fake)
+    monkeypatch.setattr(base, "OPENAI_KEY", "sk-test")
+    req = VoiceReq(prev_lang="en", ctx={"surface": "car", "can": CAR_CAN},
+                   history=[{"role": "user", "content": "Add a gas station on the way"}])
+    lines = asyncio.run(_collect(v2.stream_v2(req)))
+    assert not [l for l in lines if l["t"] == "action"]
+    tool_msgs = [m for m in calls[1]["messages"] if m.get("role") == "tool"]
+    assert tool_msgs and json.loads(tool_msgs[0]["content"]).get("unavailable") is True
+
+
+def test_a_fast_action_the_car_cannot_run_goes_to_the_model(monkeypatch):
+    fake, calls = scripted([[("delta", "Okay.")]])
+    monkeypatch.setattr(base, "_stream_chat", fake)
+    monkeypatch.setattr(base, "OPENAI_KEY", "sk-test")
+    req = VoiceReq(prev_lang="en", ctx={"can": ["weather"]},
+                   history=[{"role": "user", "content": "mute"}])
+    lines = asyncio.run(_collect(v2.stream_v2(req)))
+    assert not [l for l in lines if l["t"] == "action"] and calls
+
+
+def test_the_car_surface_is_named_in_the_trip_block():
+    assert "CAR screen" in v2._format_context_v2({"surface": "car", "speed_kmh": 40})
+    assert "CAR screen" not in v2._format_context_v2({"speed_kmh": 40})
 
 
 # ── identity + new abilities ─────────────────────────────────────────────────

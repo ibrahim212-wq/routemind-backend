@@ -405,6 +405,22 @@ def _tools_v2() -> List[Dict]:
 
 TOOLS_V2 = _tools_v2()
 
+
+def tools_for(ctx: Dict[str, Any]) -> List[Dict]:
+    """The tools this client can EXECUTE. A client that sends `can` (a list of tool names) — Sekka on the car
+    screen with no phone navigation behind it — is offered only those, so the model never promises a stop, an
+    avoidance or a map style the surface cannot perform. Without `can`: every tool (the phone)."""
+    can = ctx.get("can")
+    if not isinstance(can, list):
+        return TOOLS_V2
+    allowed = {str(c) for c in can}
+    return [t for t in TOOLS_V2 if t["function"]["name"] in allowed]
+
+
+def _allowed(ctx: Dict[str, Any], name: str) -> bool:
+    can = ctx.get("can")
+    return not isinstance(can, list) or name in {str(c) for c in can}
+
 # Tools that can ARM a confirmation on the client — at most one armed per turn
 # (the post-execution requires_confirm check is the authoritative gate; this
 # set just skips executing tools whose confirm slot is already taken).
@@ -615,6 +631,9 @@ def _format_context_v2(ctx: Dict[str, Any]) -> str:
             line += f" ({int(park['age_min'])} min ago)"
         L.append(line)
 
+    if ctx.get("surface") == "car":
+        L.append("Surface: the driver talks to you on the CAR screen, hands on the wheel — keep it short; "
+                 "stops, avoidances and map styling are done from the phone's navigation.")
     add("Route avoidances active", "avoids")
     add("Map view", "view_mode")
     if ctx.get("voice_muted") is not None:
@@ -1135,7 +1154,7 @@ class _GateResult:
 
 
 async def _gated_pass(messages: List[Dict], lang: str, with_tools: bool,
-                      emit) -> _GateResult:
+                      emit, tools: Optional[List[Dict]] = None) -> _GateResult:
     """One model pass. Streams sentences through the language gate:
       • sentences that pass are emitted immediately via emit(sentence)
       • a failing FIRST sentence aborts the pass (caller regenerates)
@@ -1148,7 +1167,7 @@ async def _gated_pass(messages: List[Dict], lang: str, with_tools: bool,
     collected: List[str] = []
     async for kind, payload in base._stream_chat(
             messages, with_tools=with_tools,
-            tools=TOOLS_V2 if with_tools else None):
+            tools=(TOOLS_V2 if tools is None else tools) if with_tools else None):
         if kind == "tool_calls":
             r.tool_calls = payload
             continue
@@ -1392,6 +1411,8 @@ async def stream_v2(req, heard: Optional[str] = None) -> AsyncGenerator[str, Non
 
     # ── Deterministic ACTION fast-path (mute/unmute/repeat/volume) ───────────
     fa = None if req.pending_action else match_action(user_text)
+    if fa and not _allowed(ctx, fa[1]["type"]):
+        fa = None
     note = ""
     nav_lang = ctx.get("nav_lang")
     if fa and fa[1]["type"] == "repeat_instruction" and nav_lang in ("ar", "en") and nav_lang != lang:
@@ -1472,16 +1493,17 @@ async def stream_v2(req, heard: Optional[str] = None) -> AsyncGenerator[str, Non
 
     confirm_used = False
     expects_confirm = False
+    tools = tools_for(ctx)
 
     async def run_pass(with_tools: bool) -> _GateResult:
         """gated pass + regenerate-once + translate fallback (better prose
         than the Emitter's per-sentence translation, which remains the
         backstop for anything that slips through)."""
-        r = await _gated_pass(messages, lang, with_tools, emit)
+        r = await _gated_pass(messages, lang, with_tools, emit, tools)
         if r.first_bad:
             logger.warning(f"copilot lang_fix regen: first sentence not {lang}")
             messages.append({"role": "system", "content": _CORRECTIVE})
-            r2 = await _gated_pass(messages, lang, with_tools, emit)
+            r2 = await _gated_pass(messages, lang, with_tools, emit, tools)
             if r2.first_bad:
                 logger.warning("copilot lang_fix translate: regen failed too")
                 fixed = await _translate(r2.full_text or r.full_text, lang)
@@ -1545,7 +1567,11 @@ async def stream_v2(req, heard: Optional[str] = None) -> AsyncGenerator[str, Non
                     "note": "Another action already awaits the user's "
                             "confirmation — tell them you'll do this one "
                             "right after they decide."}
-                if tc["name"] in _CONFIRM_TOOLS and confirm_used:
+                if not _allowed(ctx, tc["name"]):
+                    result_obj, action = {"unavailable": True,
+                                          "note": "Not available on the car screen — say it is done from "
+                                                  "the phone's navigation."}, None
+                elif tc["name"] in _CONFIRM_TOOLS and confirm_used:
                     result_obj, action = blocked_note, None
                 else:
                     result_obj, action = await execute_tool_v2(
