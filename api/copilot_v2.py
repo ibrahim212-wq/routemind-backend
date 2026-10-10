@@ -90,7 +90,8 @@ PERSONALITY:
 CONVERSATION — the microphone re-opens by itself after a reply that ends in a
 question, and listens a few seconds after any other reply:
 - Ask a question ONLY when you genuinely need the answer, and make it ONE short
-  question at the very end.
+  question at the very end, ending with "?" / «؟» — that mark is what re-opens
+  the microphone for the answer.
 - A correction («لا، قصدي…», "no, I meant…") replaces the previous request —
   act on the corrected one right away, no apology speech.
 - A closing («خلاص كده», "that's all", "no thanks") → a 2–4 word sign-off.
@@ -186,6 +187,12 @@ ROUTES — a real navigator compares, recommends, switches:
   the previous route" → undo_route_change. "Recalculate" → reroute_now.
 - "Take me home / to work" → navigate_saved. New destination → change_
   destination. Both PREVIEW and need the driver's yes.
+- WHEN TO LEAVE — your edge, no other assistant has it: "when should I head
+  back?", «أرجع امتى؟», "leave now or in an hour?", "best time tomorrow?" →
+  plan_departure (RouteMind's own prediction for THIS road by hour, the trip
+  back with trip="return_trip"). Answer with the best time and what it saves.
+- "How long to X from here?" (no trip change) → eta_to. Prayer times, iftar,
+  "will I make Friday prayer?" → prayer_times.
 - "Remind me in 20 minutes to …" / «فكرني كمان ربع ساعة …» → remind_in (a
   timed spoken reminder). "Remind me before we arrive" → remind_before_arrival.
 
@@ -245,6 +252,22 @@ CONFIRMATIONS — interpret like a human:
   is an ACKNOWLEDGEMENT: reply with one word and take no action — never run
   the same action again.
 
+THE WHOLE TRIP — what a great Egyptian co-driver does at each moment:
+- BEFORE / at the start: is it a good time to go (plan_departure), fog or dust
+  on the way (weather), fuel before a desert road, papers for the checkpoints.
+- ON THE WAY: tired or sleepy («نعسان», "I'm tired") → take it seriously: offer
+  ONE rest stop along the route (find_places along_route — a cafe or a station)
+  and say a 15-minute break beats pushing on. Kids / a bathroom → a station or
+  a mall along the route. Missed a turn → calm, one line: the route is already
+  recalculating. Running late → the delay and share_eta. A checkpoint ahead →
+  licence and car papers. Breakdown / flat tyre → safe stop first (shoulder,
+  hazards, triangle), then find_places for a tyre shop («بنشر»).
+- ARRIVING: parking near the destination (find_places near_destination), the
+  last turn, which side the place is on when the trip data says so.
+- AFTER: save_parking / where_parked, and the way back (plan_departure
+  trip="return_trip").
+- A passenger may talk to you too — same answers, same brevity.
+
 MEMORY:
 - The conversation history is this trip's shared memory. Refer back naturally.
 - Something the user just DECLINED or cancelled: don't re-suggest it this
@@ -253,7 +276,12 @@ MEMORY:
 SAFETY:
 - The driver is driving. Keep it short; never require reading; refuse
   anything that needs their eyes off the road for long, and offer the
-  hands-free alternative."""
+  hands-free alternative.
+- TENSE MOMENTS (a maneuver under 300 m, over the speed limit, heavy merging,
+  a hazard): ONE short sentence, no humour, and anything non-urgent waits —
+  «ثانية بعد اللفة» / "one sec, after this turn".
+- Anything destructive or irreversible (ending the trip, removing every stop,
+  calling someone, reporting to other drivers) waits for an explicit yes."""
 
 _TOOL_FOLLOWUP_V2 = (
     "Tool result(s) received. Reply in the pinned language, 1–2 short spoken "
@@ -367,7 +395,29 @@ _NEW_TOOLS: List[Dict] = [
        "or contact ('call my mom', «اتصل بماما») — there is no contact list; "
        "say so instead.",
        {"place_name": {"type": "string"}}, []),
+    _T("plan_departure",
+       "WHEN TO LEAVE, predicted: RouteMind's prediction model (learned per junction by weekday and hour) run "
+       "over THIS route or the trip BACK, departure slot by slot. THE tool for 'when should I head back?', "
+       "«أرجع امتى عشان أتفادى الزحمة؟», 'is it better to leave now or in an hour?', 'what's the best time "
+       "tomorrow?'. Cairo & Giza roads; it says so when a road is outside the model.",
+       {"trip": {"type": "string", "enum": ["this_route", "return_trip"],
+                 "description": "this_route = the remaining drive; return_trip = the way back from the destination."},
+        "hours": {"type": "number", "description": "How far ahead to look, in hours (default 3, max 12)."},
+        "day": {"type": "string", "enum": ["today", "tomorrow"]}}, []),
+    _T("prayer_times",
+       "Prayer times where the car is (Egyptian General Authority of Survey method) and whether the ETA arrives "
+       "before the next one: «المغرب امتى؟», «هلحق صلاة الجمعة؟», 'when is iftar', 'next prayer'.",
+       {"which": {"type": "string", "enum": ["fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha"],
+                  "description": "The prayer they asked about; omit for the next one."}}, []),
+    _T("eta_to",
+       "How long it takes to drive to a place FROM HERE, now, with live traffic — WITHOUT changing the trip. "
+       "For 'how far is Maadi from here?', «لو رحت مدينة نصر هاخد قد ايه؟», 'how long to the airport?'.",
+       {"query": {"type": "string", "description": "The place in the user's words."}}, ["query"]),
 ]
+
+# Tools the SERVER answers from data — no client executor — so every surface (the car's head unit included) has
+# them whatever its `can` list says.
+INFO_TOOLS = frozenset({"traffic_check", "weather", "plan_departure", "prayer_times", "eta_to"})
 
 # switch_route gains selector="fastest" — replace its schema in the v2 list.
 def _tools_v2() -> List[Dict]:
@@ -413,13 +463,13 @@ def tools_for(ctx: Dict[str, Any]) -> List[Dict]:
     can = ctx.get("can")
     if not isinstance(can, list):
         return TOOLS_V2
-    allowed = {str(c) for c in can}
+    allowed = {str(c) for c in can} | INFO_TOOLS
     return [t for t in TOOLS_V2 if t["function"]["name"] in allowed]
 
 
 def _allowed(ctx: Dict[str, Any], name: str) -> bool:
     can = ctx.get("can")
-    return not isinstance(can, list) or name in {str(c) for c in can}
+    return not isinstance(can, list) or name in INFO_TOOLS or name in {str(c) for c in can}
 
 # Tools that can ARM a confirmation on the client — at most one armed per turn
 # (the post-execution requires_confirm check is the authoritative gate; this
@@ -808,6 +858,24 @@ async def execute_tool_v2(name: str, args: Dict[str, Any],
     try:
         if name == "traffic_check":
             return await _traffic_check(ctx), None
+
+        if name == "plan_departure":
+            from api.copilot_skills import PLAN_DEFAULT_HOURS, plan_departure
+            trip = args.get("trip") if args.get("trip") in ("this_route", "return_trip") else "this_route"
+            day = "tomorrow" if args.get("day") == "tomorrow" else "today"
+            try:
+                hours = float(args.get("hours") or PLAN_DEFAULT_HOURS)
+            except (TypeError, ValueError):
+                hours = PLAN_DEFAULT_HOURS
+            return await plan_departure(ctx, trip, hours, day), None
+
+        if name == "prayer_times":
+            from api.copilot_skills import prayers_answer
+            return prayers_answer(ctx, args.get("which")), None
+
+        if name == "eta_to":
+            from api.copilot_skills import eta_to
+            return await eta_to(ctx, str(args.get("query") or "")), None
 
         if name == "weather":
             from api.copilot_weather import weather
@@ -1646,7 +1714,7 @@ async def stream_voice(req, audio: bytes, filename: str = "speech.wav",
         yield em.meta()
         yield em.error("not_configured")
         return
-    stt = await transcribe(audio, filename, content_type)
+    stt = await transcribe(audio, filename, content_type, prev_lang=prev)
     if stt.error:
         em = _Emitter(fallback)
         yield em.meta()
@@ -1670,7 +1738,7 @@ async def stream_voice(req, audio: bytes, filename: str = "speech.wav",
     msgs.append({"role": "user", "content": stt.text})
     req.messages = msgs
     req.stt_source = "audio"
-    req.stt_lang = None
+    req.stt_lang = stt.lang if stt.lang in ("ar", "en") else None   # the language the audio was spoken in
     req.stt_confidence = stt.confidence
     async for line in stream_v2(req, heard=stt.text):
         yield line

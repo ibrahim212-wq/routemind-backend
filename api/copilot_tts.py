@@ -125,3 +125,88 @@ async def synthesize(text: str, lang: str) -> Tuple[Optional[bytes], bool]:
         return None, False
     CACHE.put(k, resp.content)
     return resp.content, False
+
+
+# ── Sekka's voice INSIDE the turn's stream (latency) ──────────────────────────
+# The phone used to ask POST /copilot/speak for each sentence after the sentence reached it: one more round trip
+# from Egypt to the backend's region (~200 ms) before the first word, and on a scaled-out service a /speak that
+# lands on another instance than the turn misses this instance's cache and pays for the synthesis twice. A client
+# that sends `inline_voice: true` instead gets each sentence's MP3 in the same NDJSON stream, synthesised the
+# moment the sentence is written:
+#     {"t":"audio","text":<the sentence as sent in its delta>,"lang":"ar"|"en","b64":<mp3 base64>|null}
+# `meta` carries "inline_voice": true when the stream will do this (an older backend never says so, and the client
+# keeps its /speak path). The stream closes only after every sentence's audio line. b64 null = no voice for that
+# sentence (budget, provider failure): the client speaks it with its own voice at once instead of waiting.
+INLINE_PARALLEL = 2                         # sentences synthesised at once (the first one first)
+
+
+async def with_inline_voice(lines, limit_key=None):
+    """Wrap a turn's NDJSON line stream: pass every line through, and add one `audio` line per spoken sentence."""
+    import asyncio
+    import base64
+    import json as _json
+    from api.copilot_lang import split_sentences
+    from api.usage_limits import TTS_CHARS, tts_chars_per_day
+
+    q: asyncio.Queue = asyncio.Queue()
+    gate = asyncio.Semaphore(INLINE_PARALLEL)
+    state = {"lang": "en", "pending": 0}
+
+    async def pump():
+        try:
+            async for line in lines:
+                await q.put(("line", line))
+        finally:
+            await q.put(("eof", None))
+
+    async def synth(text: str, lang: str):
+        b64 = None
+        try:
+            async with gate:
+                t = clean(text)
+                if t:
+                    charged = CACHE.get(cache_key(t, lang)) is not None or not limit_key or \
+                        TTS_CHARS.take(limit_key, tts_chars_per_day(), amount=len(t))
+                    if charged:
+                        audio, _ = await synthesize(t, lang)
+                        if audio:
+                            b64 = base64.b64encode(audio).decode("ascii")
+        except Exception as e:                       # a voice problem never costs the reply
+            logger.warning(f"inline voice failed: {e}")
+        await q.put(("audio", {"t": "audio", "text": text, "lang": lang, "b64": b64}))
+
+    pump_task = asyncio.ensure_future(pump())
+    eof = False
+    try:
+        while not eof or state["pending"] > 0:
+            kind, v = await q.get()
+            if kind == "eof":
+                eof = True
+                continue
+            if kind == "audio":
+                state["pending"] -= 1
+                yield _json.dumps(v, ensure_ascii=False) + "\n"
+                continue
+            try:
+                obj = _json.loads(v)
+            except ValueError:
+                yield v
+                continue
+            t = obj.get("t")
+            if t == "meta":
+                state["lang"] = "ar" if obj.get("lang") == "ar" else "en"
+                obj["inline_voice"] = True
+                yield _json.dumps(obj, ensure_ascii=False) + "\n"
+                continue
+            yield v
+            if t == "delta":
+                # the client cuts the stream into sentences the same way: one clip per sentence it will speak
+                parts, _ = split_sentences(obj.get("text") or "", force=True)
+                for part in parts:
+                    state["pending"] += 1
+                    asyncio.ensure_future(synth(part, state["lang"]))
+            elif t == "done" and obj.get("lang") in ("ar", "en"):
+                state["lang"] = obj["lang"]
+    finally:
+        if not pump_task.done():
+            pump_task.cancel()

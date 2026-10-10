@@ -34,7 +34,7 @@ from typing import Any, Dict, Iterable, List, Set
 
 # Tools whose results carry Google place content.
 PLACE_TOOLS = frozenset({"find_places", "place_details", "add_stop", "reroute_via", "change_destination",
-                         "call_place", "pending_action"})
+                         "call_place", "eta_to", "pending_action"})
 
 # Descriptive Google content: never shown to the model with the flag off.
 _CONTENT_KEYS = frozenset({"rating", "reviews", "price", "open_now", "hours", "editorial", "review_samples",

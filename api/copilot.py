@@ -97,6 +97,7 @@ POI_LIMIT      = 5                                            # per show_pois re
 # model's default, which is "none" on gpt-5.4-mini — no reasoning-token delay
 # before speech starts).
 _GPT5_FAMILY      = COPILOT_MODEL.startswith("gpt-5")
+PROMPT_CACHE_KEY  = os.getenv("COPILOT_PROMPT_CACHE_KEY", "sekka-v3")
 COPILOT_REASONING = os.getenv("COPILOT_REASONING", "")
 
 # ONE warm client for the process — connection reuse shaves 100-300 ms per turn
@@ -1187,6 +1188,9 @@ async def _stream_chat(messages: List[Dict], with_tools: bool,
     rate-limited turn used to fail outright and the driver heard an error."""
     payload: Dict[str, Any] = {
         "model": COPILOT_MODEL, "messages": messages, "stream": True,
+        # Cost: every turn opens with the same ~3k-token system prompt + tool schemas. A stable cache key routes
+        # turns to the cache that already holds that prefix (cached input bills at a tenth of the price).
+        "prompt_cache_key": PROMPT_CACHE_KEY,
     }
     if _GPT5_FAMILY:
         payload["max_completion_tokens"] = MAX_TOKENS
@@ -1279,6 +1283,9 @@ class ConverseRequest(BaseModel):
     follow_up: bool = False
     # Set by the SERVER (stream_voice) — "audio" = the transcript came from the language-agnostic ears.
     stt_source: Optional[str] = None
+    # The client plays Sekka's voice from `audio` lines in this stream (api/copilot_tts.py with_inline_voice)
+    # instead of asking /copilot/speak per sentence.
+    inline_voice: bool = False
 
 
 @router.post("/copilot/converse")
@@ -1295,7 +1302,11 @@ async def copilot_converse(req: ConverseRequest, request: Request):
     from api.usage_limits import user_key
     req.limit_key = user_key(request.headers, request.client.host if request.client else None, req.device_id)
     req.stt_source = None                    # a text turn is never the audio path, whatever the body says
-    return StreamingResponse(stream_v2(req),
+    gen = stream_v2(req)
+    if req.inline_voice and OPENAI_KEY:
+        from api.copilot_tts import with_inline_voice
+        gen = with_inline_voice(gen, req.limit_key)
+    return StreamingResponse(gen,
                              media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-cache",
                                       "X-Accel-Buffering": "no"})
@@ -1321,8 +1332,12 @@ async def copilot_voice(request: Request, audio: UploadFile = File(...), payload
     req.stt_source = None
     secs = int(math.ceil(dur)) if dur else max(1, len(data) // 32000)
     over = not VOICE_SECONDS.take(req.limit_key, voice_seconds_per_day(), amount=secs)
-    return StreamingResponse(stream_voice(req, data, audio.filename or "speech.wav",
-                                          audio.content_type or "audio/wav", over_budget=over),
+    gen = stream_voice(req, data, audio.filename or "speech.wav", audio.content_type or "audio/wav",
+                       over_budget=over)
+    if req.inline_voice and OPENAI_KEY:
+        from api.copilot_tts import with_inline_voice
+        gen = with_inline_voice(gen, req.limit_key)
+    return StreamingResponse(gen,
                              media_type="application/x-ndjson",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
@@ -1360,6 +1375,6 @@ async def copilot_caps():
     from api.copilot_stt import STT_MODEL
     from api.copilot_tts import TTS_MODEL
     on = bool(OPENAI_KEY)
-    return {"v": 3, "voice": on, "speak": on, "max_audio_s": 20,
+    return {"v": 4, "voice": on, "speak": on, "inline_voice": on, "max_audio_s": 20,
             "stt_model": STT_MODEL, "tts_model": TTS_MODEL,
             "name": {"ar": "سِكّة", "en": "Sekka"}}

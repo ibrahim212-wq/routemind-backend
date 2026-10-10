@@ -70,7 +70,7 @@ def scripted(script):
 
 
 def run_voice(monkeypatch, req, heard_text, conf=0.9, script=None, error=None, over=False):
-    async def fake_transcribe(audio, filename="speech.wav", content_type="audio/wav"):
+    async def fake_transcribe(audio, filename="speech.wav", content_type="audio/wav", prev_lang=None):
         return stt.SttResult(heard_text, conf, 2.0, error=error)
     monkeypatch.setattr(stt, "transcribe", fake_transcribe)
     fake, calls = scripted(script or [[("delta", "Okay.")]])
@@ -125,33 +125,42 @@ def test_confidence_from_logprobs():
     assert stt.confidence_from_logprobs(None) is None
 
 
-def test_transcription_request_is_language_agnostic(monkeypatch):
-    """The root-cause property: nothing in the request tells the model which language to hear."""
-    seen = {}
+def test_transcription_is_a_bilingual_jury(monkeypatch):
+    """The root-cause property: the clip is heard three ways in parallel — Arabic with an ARABIC prompt, English
+    with an ENGLISH prompt (each prompt matches the language it forces, per the provider's guidance), and once
+    with no language and NO prompt — and never with the conversation's own text."""
+    seen = []
 
     class R:
         status_code = 200
         text = ""
 
-        @staticmethod
-        def json():
+        def __init__(self, data):
+            self.data = data
+
+        def json(self):
+            if self.data.get("language") == "ar":
+                return {"text": "هاو لونج إز ليفت", "logprobs": [{"logprob": -0.9}]}
             return {"text": "How long is left?", "logprobs": [{"logprob": -0.05}]}
 
     class C:
         async def post(self, url, headers=None, data=None, files=None):
-            seen.update(url=url, data=data, files=files)
-            return R()
+            seen.append(dict(data))
+            assert files["file"][0] == "speech.wav"
+            return R(data)
 
     monkeypatch.setattr(stt, "_client", C())
     monkeypatch.setattr(base, "OPENAI_KEY", "sk-test")
-    r = asyncio.run(stt.transcribe(wav(1.5)))
-    assert r.text == "How long is left?" and r.confidence > 0.9
-    assert "language" not in seen["data"]
-    assert seen["data"]["model"] == stt.STT_MODEL
-    # the prompt is neutral: both scripts, and it is a constant (never the conversation's last turn)
-    assert seen["data"]["prompt"] == stt.STT_PROMPT
-    assert any("؀" <= c <= "ۿ" for c in stt.STT_PROMPT) and "Ring Road" in stt.STT_PROMPT
-    assert seen["files"]["file"][0] == "speech.wav"
+    monkeypatch.setattr(stt, "JURY", True)
+    r = asyncio.run(stt.transcribe(wav(1.5), prev_lang="ar"))
+    assert r.text == "How long is left?" and r.lang == "en" and r.confidence > 0.9
+    by = {d.get("language", "auto"): d for d in seen}
+    assert set(by) == {"ar", "en", "auto"}
+    assert by["ar"]["prompt"] == stt.AR_PROMPT and by["en"]["prompt"] == stt.EN_PROMPT
+    assert "prompt" not in by["auto"]
+    assert all("؀" <= c <= "ۿ" or not c.isalpha() for c in stt.AR_PROMPT.replace(" ", ""))
+    assert not any("؀" <= c <= "ۿ" for c in stt.EN_PROMPT)
+    assert all(d["model"] == stt.STT_MODEL for d in seen)
 
 
 def test_too_short_clip_is_not_sent(monkeypatch):
@@ -357,7 +366,9 @@ def test_the_car_is_offered_only_what_it_can_do(monkeypatch):
                    history=[{"role": "user", "content": "What is the weather like at the destination?"}])
     asyncio.run(_collect(v2.stream_v2(req)))
     names = {t["function"]["name"] for t in seen[0]}
-    assert names == set(CAR_CAN) & _tool_names()
+    # what the car can execute, plus the tools the SERVER answers from data (no executor on any surface)
+    assert names == (set(CAR_CAN) | v2.INFO_TOOLS) & _tool_names()
+    assert {"plan_departure", "prayer_times", "eta_to"} <= names
     assert "add_stop" not in names and "route_options" not in names
     # the phone (no `can`) keeps every tool
     assert len(v2.tools_for({})) == len(v2.TOOLS_V2)
@@ -477,7 +488,7 @@ def test_caps(client):
 
 
 def test_voice_endpoint_streams_meta_heard_reply(client, monkeypatch):
-    async def fake_transcribe(audio, filename="speech.wav", content_type="audio/wav"):
+    async def fake_transcribe(audio, filename="speech.wav", content_type="audio/wav", prev_lang=None):
         assert stt.wav_duration_s(audio) == pytest.approx(1.5, abs=1e-3)
         return stt.SttResult("How long is left?", 0.93, 1.5)
     monkeypatch.setattr(stt, "transcribe", fake_transcribe)
@@ -504,7 +515,7 @@ def test_voice_budget_is_charged_in_seconds(client, monkeypatch):
     monkeypatch.setenv("COPILOT_VOICE_SECONDS_PER_DAY", "3")
     seen = []
 
-    async def fake_transcribe(audio, filename="speech.wav", content_type="audio/wav"):
+    async def fake_transcribe(audio, filename="speech.wav", content_type="audio/wav", prev_lang=None):
         seen.append(1)
         return stt.SttResult("thanks", 0.95, 2.0)
     monkeypatch.setattr(stt, "transcribe", fake_transcribe)

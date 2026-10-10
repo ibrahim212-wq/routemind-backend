@@ -101,6 +101,50 @@ ENTRIES: List[Entry] = [
     Entry("heat", (r"\bheat", r"\bhot\b", r"summer", r"\bac\b", r"\bحر\b", r"الصيف", r"التكييف"),
           "Summer afternoons pass 35–40 °C in Cairo and higher in Upper Egypt: tyre pressure climbs, engines run "
           "hot in jams, and a parked car becomes dangerous for children and pets within minutes."),
+    Entry("fatigue", (r"tired", r"sleepy", r"drowsy", r"exhausted", r"\bnap\b", r"نعسان", r"نعسانه", r"تعبان",
+                      r"تعبانه", r"هموت من النوم", r"عيني بتقفل", r"مرهق", r"راحه", r"استراحه"),
+          "Drowsy driving: a 15–20 minute break (coffee, a short walk) beats pushing on; on long roads stop about "
+          "every two hours. Stop at a station, a rest house or a cafe — never on a highway shoulder except in an "
+          "emergency. find_places along_route can find the next one."),
+    Entry("rain", (r"\brain", r"flood", r"underpass", r"tunnel", r"مطر", r"مطره", r"شتا", r"غرق", r"ميه في",
+                   r"نفق", r"انفاق", r"نوه", r"نوات"),
+          "Rain is rare but heavy when it comes: underpasses and tunnels (الأنفاق) and low streets in Cairo and "
+          "Alexandria flood fast — never drive into standing water of unknown depth. Alexandria's winter storms "
+          "(النوات) run November–March; the first rain makes roads slick with oil."),
+    Entry("minor_crash", (r"scratch", r"fender", r"bumped", r"hit (my|the) car", r"insurance", r"خبطه", r"خبطني",
+                          r"خبطت", r"تأمين", r"تامين", r"محضر", r"قسم"),
+          "A minor collision with nobody hurt: move out of the lane if the cars can move, hazards on, photograph "
+          "both cars and plates, exchange licence details; insurance claims need a police report (محضر) at the "
+          "nearest police station (القسم). Anyone hurt → 123 first."),
+    Entry("fines", (r"\bfine", r"ticket", r"violation", r"مخالف", r"غرامه", r"غرامات", r"سحب الرخصه"),
+          "Traffic violations (radar, parking, papers) are attached to the car licence and are checked and paid "
+          "online through the government's digital services (مصر الرقمية) or at the traffic unit (وحدة المرور) "
+          "before renewal. Amounts change — never quote one."),
+    Entry("uturn", (r"u.?turn", r"turn around", r"go back", r"service road", r"ملف", r"يلف", r"ارجع ورا",
+                    r"طريق الخدمه", r"الخدمه", r"دوران"),
+          "On Egyptian arterials many left turns are made through a U-turn opening (الملف) past the junction, so "
+          "a route can pass the destination and come back. Highways often run a parallel service road (طريق "
+          "الخدمة): miss its entry and the next U-turn fixes it."),
+    Entry("restroom", (r"restroom", r"bathroom", r"toilet", r"\bwc\b", r"حمام", r"تواليت", r"دوره ميه"),
+          "Clean restrooms on the road: the big fuel stations with a shop and the rest houses on intercity roads, "
+          "and in the city the malls. find_places along_route («بنزينة» or «مول») finds one."),
+    Entry("motorbikes", (r"motorbike", r"motorcycle", r"delivery", r"scooter", r"موتوسيكل", r"موتوسيكلات",
+                         r"دليفري", r"اسكوتر"),
+          "Delivery motorbikes weave between lanes and ride against the traffic on side streets — check the "
+          "mirrors and the blind spot before every lane change and turn."),
+    Entry("pedestrians", (r"pedestrian", r"crossing", r"walker", r"مشاه", r"ماشيين", r"بيعدي", r"بيعدوا",
+                          r"عابرين"),
+          "Pedestrians cross wherever they need to — including the Ring Road and highways, most near microbus "
+          "stops, bridges and markets, and hardest to see at dusk. Ease off near crowds."),
+    Entry("school", (r"school", r"مدرسه", r"مدارس", r"الدراسه", r"اتوبيس المدرسه"),
+          "On school days the streets around schools jam roughly 7:00–8:00 and 13:30–15:00, with buses double-"
+          "parked; the school year runs about late September to June."),
+    Entry("ev", (r"\bev\b", r"electric car", r"charg", r"tesla", r"عربيه كهربا", r"شاحن", r"شحن"),
+          "EV chargers in Egypt are concentrated in Cairo's malls, some fuel stations and the new cities; long "
+          "intercity runs need planning. find_places can search «شاحن عربيات كهربا» / 'EV charger'."),
+    Entry("speed", (r"speed limit", r"how fast", r"\bradar", r"السرعه", r"السرعة", r"رادار", r"اقصي سرعه"),
+          "Speed radars stand on the Ring Road, the highways and many city arterials, often right after a curve "
+          "or a bridge; the posted limit (and the trip data's) is the one that counts. Mobile radars move."),
 ]
 
 _COMPILED = [(e, re.compile("|".join(e.triggers))) for e in ENTRIES]

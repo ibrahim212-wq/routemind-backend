@@ -347,7 +347,7 @@ AUDIO_UNSURE_CONF = 0.35
 @dataclass
 class ResolvedLang:
     lang: str        # "ar" | "en" — the single authoritative value for the turn
-    source: str      # explicit | arabizi | translit | evidence | sticky | fallback | guard
+    source: str      # explicit | audio | arabizi | translit | evidence | sticky | fallback | guard
     arabizi: bool    # input was Latin-script Arabic (model must be told)
     unreliable: bool = False   # low-confidence / garbled: model should confirm briefly
 
@@ -377,7 +377,19 @@ def resolve_language(text: str,
          at its word: the script it wrote IS the language spoken.
     """
     if stt_source == "audio":
-        r = resolve_language(text, prev_lang, app_lang)          # evidence only — never the wrong-mic guard
+        # The audio path: the ears (api/copilot_stt.py) heard WHICH language was spoken — that verdict is the
+        # turn's language. Only an explicit request in the words ("بالإنجليزي", "speak Arabic") outranks it.
+        # Without a verdict (an old caller, or a one-juror transcription) the text evidence decides, never the
+        # wrong-mic guard: nothing on this path was language-locked.
+        t = (text or "").strip()
+        exp = explicit_language_request(t) if t else None
+        if exp:
+            return ResolvedLang(exp, "explicit", False)
+        if stt_lang in ("ar", "en") and t:
+            ar_raw, en_raw = script_counts(t)
+            r = ResolvedLang(stt_lang, "audio", stt_lang == "ar" and en_raw > 0 and ar_raw == 0)
+        else:
+            r = resolve_language(text, prev_lang, app_lang)
         if stt_confidence is not None and stt_confidence < AUDIO_UNSURE_CONF:
             r.unreliable = True
         return r
