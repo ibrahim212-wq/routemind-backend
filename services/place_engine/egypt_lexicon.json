@@ -1,0 +1,6337 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "hospital",
+      "label_ar": "مستشفى",
+      "label_en": "Hospital",
+      "proximity_class": "destination",
+      "google_type": "hospital",
+      "google_keyword": "مستشفى",
+      "osm_filter": "amenity=hospital",
+      "prominence_class": "hospital",
+      "terms_ar": [
+        "مستشفيات",
+        "مستشفي",
+        "المستشفى",
+        "مستشفى قريب"
+      ],
+      "terms_en": [
+        "hospitals",
+        "emergency room",
+        "er"
+      ],
+      "terms_franco": [
+        "mostashfa",
+        "mostashfy",
+        "mustashfa",
+        "moustachfa"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "pharmacy",
+      "label_ar": "صيدلية",
+      "label_en": "Pharmacy",
+      "proximity_class": "walkable",
+      "google_type": "pharmacy",
+      "google_keyword": "صيدلية",
+      "osm_filter": "amenity=pharmacy",
+      "prominence_class": "pharmacy",
+      "terms_ar": [
+        "صيدليات",
+        "صيدليه",
+        "اجزخانة",
+        "أجزخانة",
+        "الصيدلية",
+        "دواء"
+      ],
+      "terms_en": [
+        "pharmacies",
+        "drugstore",
+        "chemist",
+        "medicine"
+      ],
+      "terms_franco": [
+        "saydaleya",
+        "saydalia",
+        "saydalya",
+        "agzakhana"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "clinic",
+      "label_ar": "عيادة",
+      "label_en": "Clinic",
+      "proximity_class": "local",
+      "google_type": "doctor",
+      "google_keyword": "عيادة",
+      "osm_filter": "amenity=clinic",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "عيادات",
+        "عياده",
+        "دكتور",
+        "طبيب",
+        "مركز طبي"
+      ],
+      "terms_en": [
+        "clinics",
+        "doctor",
+        "physician",
+        "medical center"
+      ],
+      "terms_franco": [
+        "3eyada",
+        "eyada",
+        "ayada",
+        "doktor"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "dentist",
+      "label_ar": "دكتور أسنان",
+      "label_en": "Dentist",
+      "proximity_class": "local",
+      "google_type": "dentist",
+      "google_keyword": "عيادة اسنان",
+      "osm_filter": "amenity=dentist",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "اسنان",
+        "أسنان",
+        "طبيب اسنان",
+        "عيادة اسنان",
+        "مركز اسنان"
+      ],
+      "terms_en": [
+        "dental",
+        "dental clinic",
+        "tooth doctor"
+      ],
+      "terms_franco": [
+        "asnan",
+        "doktor asnan"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "medical_lab",
+      "label_ar": "معمل تحاليل",
+      "label_en": "Medical lab",
+      "proximity_class": "local",
+      "google_keyword": "معمل تحاليل",
+      "osm_filter": "healthcare=laboratory",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "تحاليل",
+        "معامل تحاليل",
+        "معمل",
+        "تحليل دم"
+      ],
+      "terms_en": [
+        "lab",
+        "labs",
+        "blood test",
+        "analysis"
+      ],
+      "terms_franco": [
+        "ma3mal tahalil",
+        "tahalil"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "radiology",
+      "label_ar": "مركز أشعة",
+      "label_en": "Radiology centre",
+      "proximity_class": "local",
+      "google_keyword": "مركز اشعة",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "اشعة",
+        "أشعة",
+        "مراكز اشعة",
+        "رنين",
+        "اشعة مقطعية"
+      ],
+      "terms_en": [
+        "x-ray",
+        "xray",
+        "mri",
+        "ct scan",
+        "ultrasound"
+      ],
+      "terms_franco": [
+        "ashe3a",
+        "asha3a",
+        "raneen"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "health_unit",
+      "label_ar": "وحدة صحية",
+      "label_en": "Health unit",
+      "proximity_class": "local",
+      "google_keyword": "وحدة صحية",
+      "osm_filter": "amenity=clinic",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "وحده صحيه",
+        "الوحدة الصحية",
+        "مكتب صحة"
+      ],
+      "terms_en": [
+        "health office",
+        "public health unit"
+      ],
+      "terms_franco": [
+        "we7da se7eya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "veterinary",
+      "label_ar": "دكتور بيطري",
+      "label_en": "Veterinary",
+      "proximity_class": "local",
+      "google_type": "veterinary_care",
+      "google_keyword": "عيادة بيطرية",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "بيطري",
+        "بيطرى",
+        "عيادة بيطرية",
+        "دكتور حيوانات"
+      ],
+      "terms_en": [
+        "vet",
+        "animal clinic"
+      ],
+      "terms_franco": [
+        "baytary",
+        "vet"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "atm",
+      "label_ar": "ماكينة صراف",
+      "label_en": "ATM",
+      "proximity_class": "walkable",
+      "google_type": "atm",
+      "google_keyword": "ماكينة صراف الي",
+      "osm_filter": "amenity=atm",
+      "prominence_class": "atm",
+      "terms_ar": [
+        "صراف",
+        "صراف الي",
+        "ماكينة فلوس",
+        "اي تي ام",
+        "سحب فلوس"
+      ],
+      "terms_en": [
+        "cash machine",
+        "cashpoint",
+        "atms"
+      ],
+      "terms_franco": [
+        "sarraf",
+        "saraf aly"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "bank",
+      "label_ar": "بنك",
+      "label_en": "Bank",
+      "proximity_class": "local",
+      "google_type": "bank",
+      "google_keyword": "بنك",
+      "osm_filter": "amenity=bank",
+      "prominence_class": "bank",
+      "terms_ar": [
+        "بنوك",
+        "البنك",
+        "فرع بنك"
+      ],
+      "terms_en": [
+        "banks",
+        "branch"
+      ],
+      "terms_franco": [
+        "bank"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "exchange",
+      "label_ar": "مكتب صرافة",
+      "label_en": "Exchange office",
+      "proximity_class": "local",
+      "google_keyword": "مكتب صرافة",
+      "osm_filter": "amenity=bureau_de_change",
+      "prominence_class": "bank",
+      "terms_ar": [
+        "صرافة",
+        "تحويل عملة",
+        "دولار",
+        "مكاتب صرافة"
+      ],
+      "terms_en": [
+        "currency exchange",
+        "money exchange",
+        "forex"
+      ],
+      "terms_franco": [
+        "serafa",
+        "sarafa"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "post_office",
+      "label_ar": "مكتب بريد",
+      "label_en": "Post office",
+      "proximity_class": "local",
+      "google_type": "post_office",
+      "google_keyword": "مكتب بريد",
+      "osm_filter": "amenity=post_office",
+      "prominence_class": "government",
+      "terms_ar": [
+        "بريد",
+        "البوسطة",
+        "مكاتب بريد",
+        "بوستة",
+        "البوستة",
+        "بوسطة"
+      ],
+      "terms_en": [
+        "post",
+        "mail"
+      ],
+      "terms_franco": [
+        "bareed",
+        "bosta"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "gas_station",
+      "label_ar": "محطة بنزين",
+      "label_en": "Gas station",
+      "proximity_class": "local",
+      "google_type": "gas_station",
+      "google_keyword": "محطة بنزين",
+      "osm_filter": "amenity=fuel",
+      "prominence_class": "gas_station",
+      "terms_ar": [
+        "بنزينة",
+        "بنزين",
+        "محطة وقود",
+        "محطة",
+        "سولار",
+        "بنزينه"
+      ],
+      "terms_en": [
+        "fuel",
+        "petrol",
+        "petrol station",
+        "gas",
+        "diesel"
+      ],
+      "terms_franco": [
+        "banzina",
+        "banzeena",
+        "benzine"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "car_repair",
+      "label_ar": "ورشة سيارات",
+      "label_en": "Car repair",
+      "proximity_class": "local",
+      "google_type": "car_repair",
+      "google_keyword": "ورشة سيارات",
+      "osm_filter": "shop=car_repair",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "ورشة",
+        "ورش",
+        "تصليح عربيات",
+        "مركز صيانة",
+        "ميكانيكي"
+      ],
+      "terms_en": [
+        "garage",
+        "mechanic",
+        "auto repair",
+        "service center"
+      ],
+      "terms_franco": [
+        "warsha",
+        "mekaniky"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "transmission_repair",
+      "label_ar": "تصليح فتيس",
+      "label_en": "Transmission repair",
+      "proximity_class": "local",
+      "google_keyword": "تصليح فتيس",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "فتيس",
+        "الفتيس",
+        "جير",
+        "ورشة فتيس",
+        "تصليح جير"
+      ],
+      "terms_en": [
+        "gearbox",
+        "transmission",
+        "clutch"
+      ],
+      "terms_franco": [
+        "fetees",
+        "fetes",
+        "gear"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "body_shop",
+      "label_ar": "سمكري",
+      "label_en": "Body shop",
+      "proximity_class": "local",
+      "google_keyword": "سمكرة ودوكو",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "سمكرة",
+        "سمكري",
+        "دوكو",
+        "سمكره",
+        "دهان سيارات"
+      ],
+      "terms_en": [
+        "panel beater",
+        "denting",
+        "painting",
+        "bodywork"
+      ],
+      "terms_franco": [
+        "samkary",
+        "samkara",
+        "doko"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "tyre_shop",
+      "label_ar": "محل كاوتش",
+      "label_en": "Tyre shop",
+      "proximity_class": "walkable",
+      "google_keyword": "كاوتش سيارات",
+      "osm_filter": "shop=tyres",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "كاوتش",
+        "اطارات",
+        "إطارات",
+        "بنشر",
+        "كاوتش سيارات"
+      ],
+      "terms_en": [
+        "tyre",
+        "tire",
+        "tires",
+        "puncture",
+        "wheel"
+      ],
+      "terms_franco": [
+        "kawetch",
+        "kawitch",
+        "banshar"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "oil_change",
+      "label_ar": "تغيير زيت",
+      "label_en": "Oil change",
+      "proximity_class": "local",
+      "google_keyword": "تغيير زيت سيارات",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "زيت",
+        "تغيير الزيت",
+        "زيوت",
+        "فلتر زيت"
+      ],
+      "terms_en": [
+        "oil",
+        "lube",
+        "oil service"
+      ],
+      "terms_franco": [
+        "taghyeer zeit",
+        "zeit"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "battery_shop",
+      "label_ar": "محل بطاريات",
+      "label_en": "Battery shop",
+      "proximity_class": "local",
+      "google_keyword": "بطاريات سيارات",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "بطارية",
+        "بطاريات",
+        "بطاريه",
+        "شحن بطارية"
+      ],
+      "terms_en": [
+        "battery",
+        "batteries",
+        "jump start"
+      ],
+      "terms_franco": [
+        "batareya",
+        "battariya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "roadside_assistance",
+      "label_ar": "ونش انقاذ",
+      "label_en": "Roadside assistance",
+      "proximity_class": "destination",
+      "google_keyword": "ونش انقاذ سيارات",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "ونش",
+        "انقاذ",
+        "سطحة",
+        "قطر سيارات",
+        "ونش انقاذ"
+      ],
+      "terms_en": [
+        "tow",
+        "towing",
+        "breakdown",
+        "recovery"
+      ],
+      "terms_franco": [
+        "wensh",
+        "sat7a"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "car_wash",
+      "label_ar": "غسيل سيارات",
+      "label_en": "Car wash",
+      "proximity_class": "local",
+      "google_type": "car_wash",
+      "google_keyword": "غسيل سيارات",
+      "osm_filter": "amenity=car_wash",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "غسيل",
+        "مغسلة",
+        "تلميع سيارات",
+        "غسيل عربيات",
+        "غسيل عربية",
+        "مغسلة عربيات",
+        "مغسلة سيارات"
+      ],
+      "terms_en": [
+        "carwash",
+        "wash",
+        "detailing"
+      ],
+      "terms_franco": [
+        "ghaseel",
+        "maghsala"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "parking",
+      "label_ar": "موقف",
+      "label_en": "Parking",
+      "proximity_class": "walkable",
+      "google_type": "parking",
+      "google_keyword": "جراج انتظار",
+      "osm_filter": "amenity=parking",
+      "prominence_class": "parking",
+      "terms_ar": [
+        "جراج",
+        "انتظار",
+        "مواقف",
+        "باركينج",
+        "موقف سيارات"
+      ],
+      "terms_en": [
+        "car park",
+        "garage",
+        "parking lot"
+      ],
+      "terms_franco": [
+        "garage",
+        "mawqaf",
+        "parking"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "restaurant",
+      "label_ar": "مطعم",
+      "label_en": "Restaurant",
+      "proximity_class": "local",
+      "google_type": "restaurant",
+      "google_keyword": "مطعم",
+      "osm_filter": "amenity=restaurant",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "مطاعم",
+        "اكل",
+        "أكل",
+        "مطعم قريب",
+        "فطار",
+        "غدا",
+        "عشا"
+      ],
+      "terms_en": [
+        "restaurants",
+        "food",
+        "eat",
+        "dining",
+        "lunch",
+        "dinner"
+      ],
+      "terms_franco": [
+        "mat3am",
+        "mataam",
+        "akl"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "cafe",
+      "label_ar": "كافيه",
+      "label_en": "Cafe",
+      "proximity_class": "walkable",
+      "google_type": "cafe",
+      "google_keyword": "كافيه",
+      "osm_filter": "amenity=cafe",
+      "prominence_class": "cafe",
+      "terms_ar": [
+        "قهوة",
+        "قهوه",
+        "كافيهات",
+        "مقهى",
+        "كوفي",
+        "شاي"
+      ],
+      "terms_en": [
+        "coffee",
+        "cafes",
+        "coffee shop",
+        "tea"
+      ],
+      "terms_franco": [
+        "ahwa",
+        "2ahwa",
+        "kafeeh",
+        "coffee"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "bakery",
+      "label_ar": "فرن بلدي",
+      "label_en": "Bakery",
+      "proximity_class": "walkable",
+      "google_type": "bakery",
+      "google_keyword": "مخبز",
+      "osm_filter": "shop=bakery",
+      "prominence_class": "store",
+      "terms_ar": [
+        "مخبز",
+        "فرن",
+        "عيش",
+        "خبز",
+        "مخبوزات",
+        "فرن بلدى",
+        "فرن عيش"
+      ],
+      "terms_en": [
+        "bread",
+        "baker",
+        "patisserie"
+      ],
+      "terms_franco": [
+        "forn",
+        "makhbaz",
+        "eish"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "sweets",
+      "label_ar": "حلواني",
+      "label_en": "Sweets",
+      "proximity_class": "local",
+      "google_keyword": "حلواني",
+      "prominence_class": "store",
+      "terms_ar": [
+        "حلويات",
+        "حلوانى",
+        "جاتوه",
+        "كنافة",
+        "بسبوسة",
+        "تورتة"
+      ],
+      "terms_en": [
+        "dessert",
+        "desserts",
+        "cake",
+        "pastry",
+        "gateau"
+      ],
+      "terms_franco": [
+        "halawany",
+        "helwyat",
+        "gateau"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "juice_bar",
+      "label_ar": "عصير",
+      "label_en": "Juice bar",
+      "proximity_class": "walkable",
+      "google_keyword": "محل عصير",
+      "prominence_class": "store",
+      "terms_ar": [
+        "عصاير",
+        "عصائر",
+        "محل عصير",
+        "قصب"
+      ],
+      "terms_en": [
+        "juice",
+        "smoothie",
+        "sugarcane"
+      ],
+      "terms_franco": [
+        "3aseer",
+        "aseer",
+        "asab"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "koshary",
+      "label_ar": "كشري",
+      "label_en": "Koshary",
+      "proximity_class": "local",
+      "google_keyword": "كشري",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "كشرى",
+        "محل كشري"
+      ],
+      "terms_en": [
+        "koshari",
+        "kushari"
+      ],
+      "terms_franco": [
+        "koshary",
+        "kushari"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "foul_taameya",
+      "label_ar": "فول وطعمية",
+      "label_en": "Foul & falafel",
+      "proximity_class": "walkable",
+      "google_keyword": "فول وطعمية",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "فول",
+        "طعمية",
+        "فلافل",
+        "فول و طعمية",
+        "عربية فول",
+        "فطار فول",
+        "فول وطعميه"
+      ],
+      "terms_en": [
+        "falafel",
+        "foul",
+        "ful medames"
+      ],
+      "terms_franco": [
+        "fool w ta3meya",
+        "ta3meya",
+        "fool"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "grill",
+      "label_ar": "مشويات",
+      "label_en": "Grill",
+      "proximity_class": "local",
+      "google_keyword": "مطعم مشويات",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "مشوي",
+        "كباب",
+        "كفتة",
+        "حمام",
+        "فراخ مشوية",
+        "شاورما",
+        "حاتي",
+        "كبابجي"
+      ],
+      "terms_en": [
+        "grill",
+        "kebab",
+        "bbq",
+        "shawarma",
+        "grilled"
+      ],
+      "terms_franco": [
+        "mashwyat",
+        "kebab",
+        "kofta",
+        "shawerma"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "seafood",
+      "label_ar": "أسماك",
+      "label_en": "Seafood",
+      "proximity_class": "local",
+      "google_keyword": "مطعم اسماك",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "سمك",
+        "اسماك",
+        "مطعم سمك",
+        "جمبري",
+        "كاليماري",
+        "فسخاني",
+        "فسيخ"
+      ],
+      "terms_en": [
+        "fish",
+        "shrimp",
+        "seafood restaurant"
+      ],
+      "terms_franco": [
+        "samak",
+        "gambary"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "pizza",
+      "label_ar": "بيتزا",
+      "label_en": "Pizza",
+      "proximity_class": "local",
+      "google_keyword": "بيتزا",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "بيتزا",
+        "فطير",
+        "فطاير"
+      ],
+      "terms_en": [
+        "pizza",
+        "pizzeria"
+      ],
+      "terms_franco": [
+        "pizza",
+        "fateer"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "burger",
+      "label_ar": "برجر",
+      "label_en": "Burger",
+      "proximity_class": "local",
+      "google_keyword": "برجر",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "برجر",
+        "برغر",
+        "ساندوتشات"
+      ],
+      "terms_en": [
+        "burger",
+        "burgers",
+        "fast food"
+      ],
+      "terms_franco": [
+        "burger"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "supermarket",
+      "label_ar": "سوبر ماركت",
+      "label_en": "Supermarket",
+      "proximity_class": "walkable",
+      "google_type": "supermarket",
+      "google_keyword": "سوبر ماركت",
+      "osm_filter": "shop=supermarket",
+      "prominence_class": "supermarket",
+      "terms_ar": [
+        "سوبرماركت",
+        "بقالة",
+        "بقاله",
+        "ماركت",
+        "هايبر"
+      ],
+      "terms_en": [
+        "grocery",
+        "groceries",
+        "hypermarket",
+        "market"
+      ],
+      "terms_franco": [
+        "supermarket",
+        "be2ala",
+        "baqala"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "mall",
+      "label_ar": "مول",
+      "label_en": "Mall",
+      "proximity_class": "destination",
+      "google_type": "shopping_mall",
+      "google_keyword": "مول",
+      "osm_filter": "shop=mall",
+      "prominence_class": "mall",
+      "terms_ar": [
+        "مولات",
+        "سنتر",
+        "مركز تجاري",
+        "تسوق"
+      ],
+      "terms_en": [
+        "malls",
+        "shopping",
+        "shopping center"
+      ],
+      "terms_franco": [
+        "mall",
+        "center",
+        "mol",
+        "mool"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "mobile_shop",
+      "label_ar": "محل موبايلات",
+      "label_en": "Mobile shop",
+      "proximity_class": "local",
+      "google_keyword": "محل موبايلات",
+      "osm_filter": "shop=mobile_phone",
+      "prominence_class": "store",
+      "terms_ar": [
+        "موبايلات",
+        "محل موبايل",
+        "تليفونات",
+        "اكسسوارات موبايل"
+      ],
+      "terms_en": [
+        "mobile",
+        "phone shop",
+        "phones",
+        "cell phone"
+      ],
+      "terms_franco": [
+        "mobilat",
+        "mobile"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "bookshop",
+      "label_ar": "مكتبة",
+      "label_en": "Bookshop",
+      "proximity_class": "local",
+      "google_type": "book_store",
+      "google_keyword": "مكتبة",
+      "osm_filter": "shop=books",
+      "prominence_class": "store",
+      "terms_ar": [
+        "مكتبه",
+        "مكتبات",
+        "ادوات مكتبية",
+        "كراسات",
+        "قرطاسية"
+      ],
+      "terms_en": [
+        "books",
+        "stationery",
+        "library"
+      ],
+      "terms_franco": [
+        "maktaba"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "butcher",
+      "label_ar": "جزارة",
+      "label_en": "Butcher",
+      "proximity_class": "walkable",
+      "google_keyword": "جزارة",
+      "osm_filter": "shop=butcher",
+      "prominence_class": "store",
+      "terms_ar": [
+        "جزار",
+        "لحمة",
+        "محل لحوم",
+        "جزاره"
+      ],
+      "terms_en": [
+        "meat",
+        "meat shop"
+      ],
+      "terms_franco": [
+        "gazzar",
+        "gezara",
+        "lahma"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "cold_store",
+      "label_ar": "ثلاجة",
+      "label_en": "Cold store",
+      "proximity_class": "walkable",
+      "google_keyword": "ثلاجة مواد غذائية",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ثلاجه",
+        "ثلاجات",
+        "تلاجة",
+        "ثلج"
+      ],
+      "terms_en": [
+        "ice",
+        "frozen",
+        "cold storage"
+      ],
+      "terms_franco": [
+        "tallaga",
+        "talaga"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "florist",
+      "label_ar": "محل ورد",
+      "label_en": "Florist",
+      "proximity_class": "local",
+      "google_type": "florist",
+      "google_keyword": "محل ورد",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ورد",
+        "زهور",
+        "بوكيه"
+      ],
+      "terms_en": [
+        "flowers",
+        "flower shop",
+        "bouquet"
+      ],
+      "terms_franco": [
+        "ward",
+        "zohour"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "laundry",
+      "label_ar": "مكوجي",
+      "label_en": "Laundry",
+      "proximity_class": "walkable",
+      "google_type": "laundry",
+      "google_keyword": "مكوجي",
+      "osm_filter": "shop=laundry",
+      "prominence_class": "store",
+      "terms_ar": [
+        "مكوجى",
+        "مكواة",
+        "كي ملابس",
+        "مغسلة ملابس",
+        "دراي كلين"
+      ],
+      "terms_en": [
+        "dry clean",
+        "dry cleaning",
+        "ironing"
+      ],
+      "terms_franco": [
+        "makwagy",
+        "makwagi",
+        "dry clean"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "plumber",
+      "label_ar": "سباك",
+      "label_en": "Plumber",
+      "proximity_class": "local",
+      "google_type": "plumber",
+      "google_keyword": "سباك",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "سباكة",
+        "سباكه",
+        "مواسير",
+        "تسليك مجاري"
+      ],
+      "terms_en": [
+        "plumbing",
+        "pipes",
+        "drain"
+      ],
+      "terms_franco": [
+        "sabbak",
+        "sabak"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "electrician",
+      "label_ar": "كهربائي",
+      "label_en": "Electrician",
+      "proximity_class": "local",
+      "google_type": "electrician",
+      "google_keyword": "كهربائي",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "كهربجي",
+        "كهرباء",
+        "فني كهرباء",
+        "كهربائى"
+      ],
+      "terms_en": [
+        "electrical",
+        "wiring"
+      ],
+      "terms_franco": [
+        "kahrabaey",
+        "kahrabgy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "carpenter",
+      "label_ar": "نجار",
+      "label_en": "Carpenter",
+      "proximity_class": "local",
+      "google_keyword": "نجار",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "نجارة",
+        "ورشة نجارة",
+        "موبيليا"
+      ],
+      "terms_en": [
+        "carpentry",
+        "woodwork",
+        "furniture"
+      ],
+      "terms_franco": [
+        "naggar",
+        "negara"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "barber",
+      "label_ar": "كوافير",
+      "label_en": "Hairdresser",
+      "proximity_class": "walkable",
+      "google_type": "hair_care",
+      "google_keyword": "كوافير",
+      "osm_filter": "shop=hairdresser",
+      "prominence_class": "store",
+      "terms_ar": [
+        "حلاق",
+        "حلاقة",
+        "صالون",
+        "كوافيرة",
+        "بربر"
+      ],
+      "terms_en": [
+        "barber",
+        "salon",
+        "hair",
+        "haircut"
+      ],
+      "terms_franco": [
+        "coiffeur",
+        "kwafeer",
+        "hallak"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "print_shop",
+      "label_ar": "مركز تصوير مستندات",
+      "label_en": "Print & copy",
+      "proximity_class": "walkable",
+      "google_keyword": "تصوير مستندات",
+      "prominence_class": "store",
+      "terms_ar": [
+        "تصوير مستندات",
+        "مكتب تصوير",
+        "طباعة",
+        "فوتوكوبي",
+        "سنتر تصوير"
+      ],
+      "terms_en": [
+        "printing",
+        "photocopy",
+        "copy shop",
+        "print"
+      ],
+      "terms_franco": [
+        "tasweer mostanadat",
+        "photocopy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "internet_cafe",
+      "label_ar": "سايبر",
+      "label_en": "Internet cafe",
+      "proximity_class": "walkable",
+      "google_keyword": "سايبر انترنت",
+      "osm_filter": "amenity=internet_cafe",
+      "prominence_class": "store",
+      "terms_ar": [
+        "سايبر كافيه",
+        "نت",
+        "انترنت",
+        "سيبر"
+      ],
+      "terms_en": [
+        "cyber",
+        "internet",
+        "net cafe"
+      ],
+      "terms_franco": [
+        "cyber",
+        "saybar"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "telecom_exchange",
+      "label_ar": "سنترال",
+      "label_en": "Telephone exchange",
+      "proximity_class": "local",
+      "google_keyword": "سنترال",
+      "prominence_class": "government",
+      "terms_ar": [
+        "سنترال تليفونات",
+        "المصرية للاتصالات",
+        "سنترال الحي"
+      ],
+      "terms_en": [
+        "telephone exchange",
+        "telecom office"
+      ],
+      "terms_franco": [
+        "central",
+        "sentral"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "electricity_payment",
+      "label_ar": "دفع فاتورة الكهرباء",
+      "label_en": "Electricity payment",
+      "proximity_class": "walkable",
+      "google_keyword": "مكتب كهرباء دفع فواتير",
+      "prominence_class": "government",
+      "terms_ar": [
+        "كهربا",
+        "كهرباء",
+        "شحن الكهربا",
+        "كارت الكهربا",
+        "عداد كهرباء",
+        "فاتورة الكهرباء",
+        "محطة كهرباء دفع"
+      ],
+      "terms_en": [
+        "electricity",
+        "electricity bill",
+        "meter card",
+        "utility bill"
+      ],
+      "terms_franco": [
+        "kahraba",
+        "card kahraba"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "gym",
+      "label_ar": "جيم",
+      "label_en": "Gym",
+      "proximity_class": "local",
+      "google_type": "gym",
+      "google_keyword": "جيم",
+      "osm_filter": "leisure=fitness_centre",
+      "prominence_class": "gym",
+      "terms_ar": [
+        "نادي رياضي",
+        "صالة رياضية",
+        "جم",
+        "فتنس"
+      ],
+      "terms_en": [
+        "fitness",
+        "workout",
+        "fitness center"
+      ],
+      "terms_franco": [
+        "gym",
+        "fitness"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "notary",
+      "label_ar": "مكتب توثيق",
+      "label_en": "Notary office",
+      "proximity_class": "destination",
+      "google_keyword": "مكتب توثيق",
+      "prominence_class": "government",
+      "terms_ar": [
+        "توثيق",
+        "التوثيق",
+        "توكيل",
+        "مكاتب توثيق"
+      ],
+      "terms_en": [
+        "notary",
+        "power of attorney"
+      ],
+      "terms_franco": [
+        "tawtheeq",
+        "tawkeel"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "real_estate_registry",
+      "label_ar": "الشهر العقاري",
+      "label_en": "Real-estate registry",
+      "proximity_class": "destination",
+      "google_keyword": "الشهر العقاري",
+      "prominence_class": "government",
+      "terms_ar": [
+        "شهر عقاري",
+        "شهر عقارى",
+        "الشهر العقارى",
+        "تسجيل عقار"
+      ],
+      "terms_en": [
+        "property registry",
+        "land registry"
+      ],
+      "terms_franco": [
+        "shahr 3akary",
+        "shahr akary"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "traffic_department",
+      "label_ar": "مرور",
+      "label_en": "Traffic department",
+      "proximity_class": "destination",
+      "google_keyword": "وحدة مرور",
+      "prominence_class": "government",
+      "terms_ar": [
+        "وحدة مرور",
+        "المرور",
+        "رخصة",
+        "رخص",
+        "ترخيص سيارات",
+        "مباحث المرور"
+      ],
+      "terms_en": [
+        "traffic",
+        "driving licence",
+        "license",
+        "vehicle licensing"
+      ],
+      "terms_franco": [
+        "moroor",
+        "morour",
+        "rokhsa"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "police",
+      "label_ar": "قسم شرطة",
+      "label_en": "Police station",
+      "proximity_class": "destination",
+      "google_type": "police",
+      "google_keyword": "قسم شرطة",
+      "osm_filter": "amenity=police",
+      "prominence_class": "government",
+      "terms_ar": [
+        "قسم",
+        "بوليس",
+        "شرطة",
+        "مركز شرطة",
+        "نجدة"
+      ],
+      "terms_en": [
+        "police",
+        "station"
+      ],
+      "terms_franco": [
+        "2esm",
+        "esm shorta",
+        "bolice"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "government_office",
+      "label_ar": "مصلحة حكومية",
+      "label_en": "Government office",
+      "proximity_class": "destination",
+      "google_type": "local_government_office",
+      "google_keyword": "مجمع مصالح حكومية",
+      "prominence_class": "government",
+      "terms_ar": [
+        "حي",
+        "الحي",
+        "مجمع مصالح",
+        "سجل مدني",
+        "بطاقة",
+        "مصلحة"
+      ],
+      "terms_en": [
+        "municipality",
+        "civil registry",
+        "id office"
+      ],
+      "terms_franco": [
+        "seggel madany",
+        "mogamma3"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "hotel",
+      "label_ar": "فندق",
+      "label_en": "Hotel",
+      "proximity_class": "destination",
+      "google_type": "lodging",
+      "google_keyword": "فندق",
+      "osm_filter": "tourism=hotel",
+      "prominence_class": "hotel",
+      "terms_ar": [
+        "فنادق",
+        "اقامة",
+        "نزل"
+      ],
+      "terms_en": [
+        "hotels",
+        "lodging",
+        "stay"
+      ],
+      "terms_franco": [
+        "fondo2",
+        "fondok",
+        "hotel"
+      ],
+      "quick_chip": true
+    },
+    {
+      "id": "mosque",
+      "label_ar": "مسجد",
+      "label_en": "Mosque",
+      "proximity_class": "walkable",
+      "google_type": "mosque",
+      "google_keyword": "مسجد",
+      "osm_filter": "amenity=place_of_worship",
+      "prominence_class": "mosque",
+      "terms_ar": [
+        "مساجد",
+        "جامع",
+        "زاوية",
+        "صلاة"
+      ],
+      "terms_en": [
+        "mosques",
+        "prayer"
+      ],
+      "terms_franco": [
+        "masged",
+        "gam3",
+        "masjid"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "church",
+      "label_ar": "كنيسة",
+      "label_en": "Church",
+      "proximity_class": "local",
+      "google_type": "church",
+      "google_keyword": "كنيسة",
+      "osm_filter": "amenity=place_of_worship",
+      "prominence_class": "church",
+      "terms_ar": [
+        "كنائس",
+        "كنيسه",
+        "دير"
+      ],
+      "terms_en": [
+        "churches",
+        "cathedral",
+        "monastery"
+      ],
+      "terms_franco": [
+        "kenisa"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "school",
+      "label_ar": "مدرسة",
+      "label_en": "School",
+      "proximity_class": "local",
+      "google_type": "school",
+      "google_keyword": "مدرسة",
+      "osm_filter": "amenity=school",
+      "prominence_class": "school",
+      "terms_ar": [
+        "مدارس",
+        "مدرسه",
+        "حضانة"
+      ],
+      "terms_en": [
+        "schools",
+        "nursery",
+        "kindergarten"
+      ],
+      "terms_franco": [
+        "madrasa",
+        "madrasah"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "university",
+      "label_ar": "جامعة",
+      "label_en": "University",
+      "proximity_class": "destination",
+      "google_type": "university",
+      "google_keyword": "جامعة",
+      "osm_filter": "amenity=university",
+      "prominence_class": "university",
+      "terms_ar": [
+        "جامعات",
+        "كلية",
+        "كليات",
+        "معهد"
+      ],
+      "terms_en": [
+        "universities",
+        "faculty",
+        "college",
+        "institute"
+      ],
+      "terms_franco": [
+        "gam3a",
+        "gamaa",
+        "kolleya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "metro_station",
+      "label_ar": "محطة مترو",
+      "label_en": "Metro station",
+      "proximity_class": "local",
+      "google_type": "subway_station",
+      "google_keyword": "محطة مترو",
+      "osm_filter": "railway=station",
+      "prominence_class": "subway_station",
+      "terms_ar": [
+        "مترو",
+        "محطة المترو",
+        "محطات مترو"
+      ],
+      "terms_en": [
+        "metro",
+        "subway",
+        "underground"
+      ],
+      "terms_franco": [
+        "metro",
+        "ma7atet metro"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "bus_station",
+      "label_ar": "موقف أتوبيس",
+      "label_en": "Bus station",
+      "proximity_class": "local",
+      "google_type": "bus_station",
+      "google_keyword": "موقف اتوبيس",
+      "osm_filter": "amenity=bus_station",
+      "prominence_class": "bus_station",
+      "terms_ar": [
+        "اتوبيس",
+        "أتوبيس",
+        "موقف اتوبيسات",
+        "محطة اتوبيس",
+        "ميكروباص",
+        "موقف ميكروباص",
+        "موقف الميكروباص",
+        "موقف ميكروباصات",
+        "موقف العربيات"
+      ],
+      "terms_en": [
+        "bus",
+        "bus stop",
+        "coach"
+      ],
+      "terms_franco": [
+        "otobees",
+        "microbus"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "airport",
+      "label_ar": "مطار",
+      "label_en": "Airport",
+      "proximity_class": "landmark",
+      "google_type": "airport",
+      "google_keyword": "مطار",
+      "osm_filter": "aeroway=aerodrome",
+      "prominence_class": "airport",
+      "terms_ar": [
+        "مطارات",
+        "صالة سفر",
+        "الطيران"
+      ],
+      "terms_en": [
+        "airports",
+        "terminal",
+        "flight"
+      ],
+      "terms_franco": [
+        "matar"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "park",
+      "label_ar": "حديقة",
+      "label_en": "Park",
+      "proximity_class": "local",
+      "google_type": "park",
+      "google_keyword": "حديقة",
+      "osm_filter": "leisure=park",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "حدائق",
+        "جنينة",
+        "متنزه",
+        "حديقه"
+      ],
+      "terms_en": [
+        "parks",
+        "garden",
+        "playground"
+      ],
+      "terms_franco": [
+        "genena",
+        "hadika"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "physiotherapy",
+      "label_ar": "علاج طبيعي",
+      "label_en": "Physiotherapy",
+      "proximity_class": "local",
+      "osm_filter": "healthcare=physiotherapist",
+      "prominence_class": "clinic",
+      "terms_ar": [
+        "مركز علاج طبيعي",
+        "علاج طبيعى",
+        "تأهيل",
+        "مركز تأهيل"
+      ],
+      "terms_en": [
+        "physical therapy",
+        "physio",
+        "rehab",
+        "rehabilitation"
+      ],
+      "terms_franco": [
+        "3elag tabe3y",
+        "elag tabee3i"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "ev_charging",
+      "label_ar": "شحن عربيات كهربا",
+      "label_en": "EV charging",
+      "proximity_class": "local",
+      "osm_filter": "amenity=charging_station",
+      "prominence_class": "gas_station",
+      "terms_ar": [
+        "شاحن سيارات",
+        "محطة شحن",
+        "شحن سيارات كهربائية",
+        "شاحن كهربا",
+        "شاحن عربية"
+      ],
+      "terms_en": [
+        "charging station",
+        "ev charger",
+        "electric car charging",
+        "ev charging"
+      ],
+      "terms_franco": [
+        "sha7en 3arabeya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "auto_parts",
+      "label_ar": "قطع غيار",
+      "label_en": "Auto parts",
+      "proximity_class": "local",
+      "osm_filter": "shop=car_parts",
+      "prominence_class": "workshop",
+      "terms_ar": [
+        "قطع غيار سيارات",
+        "اسبيرات",
+        "إسبيرات",
+        "محل قطع غيار",
+        "قطع غيار عربيات"
+      ],
+      "terms_en": [
+        "spare parts",
+        "car parts",
+        "auto parts store"
+      ],
+      "terms_franco": [
+        "2ata3 ghyar",
+        "spair parts",
+        "esbirat"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "car_dealer",
+      "label_ar": "معرض سيارات",
+      "label_en": "Car dealer",
+      "proximity_class": "destination",
+      "osm_filter": "shop=car",
+      "prominence_class": "store",
+      "terms_ar": [
+        "معارض سيارات",
+        "توكيل",
+        "وكيل سيارات",
+        "معرض عربيات",
+        "توكيل سيارات"
+      ],
+      "terms_en": [
+        "car showroom",
+        "dealership",
+        "car dealer"
+      ],
+      "terms_franco": [
+        "ma3rad sayarat",
+        "tawkeel"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "car_rental",
+      "label_ar": "تأجير سيارات",
+      "label_en": "Car rental",
+      "proximity_class": "local",
+      "osm_filter": "amenity=car_rental",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ايجار عربيات",
+        "تأجير عربيات",
+        "ايجار سيارات",
+        "ليموزين"
+      ],
+      "terms_en": [
+        "rent a car",
+        "car hire",
+        "limousine"
+      ],
+      "terms_franco": [
+        "egar 3arabeyat"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "fast_food",
+      "label_ar": "وجبات سريعة",
+      "label_en": "Fast food",
+      "proximity_class": "local",
+      "osm_filter": "amenity=fast_food",
+      "prominence_class": "restaurant",
+      "terms_ar": [
+        "أكل سريع",
+        "اكل سريع",
+        "فاست فود",
+        "ساندوتشات",
+        "سندوتشات",
+        "شاورما",
+        "فراخ مقلية",
+        "كريسبي",
+        "تيك اواي"
+      ],
+      "terms_en": [
+        "fast food",
+        "sandwiches",
+        "shawarma",
+        "fried chicken",
+        "takeaway"
+      ],
+      "terms_franco": [
+        "sandwechat",
+        "shawerma"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "ice_cream",
+      "label_ar": "آيس كريم",
+      "label_en": "Ice cream",
+      "proximity_class": "walkable",
+      "osm_filter": "amenity=ice_cream",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ايس كريم",
+        "جيلاتي",
+        "جيلاتو",
+        "بوظة",
+        "آيس كريم"
+      ],
+      "terms_en": [
+        "gelato",
+        "ice cream shop"
+      ],
+      "terms_franco": [
+        "ays krem",
+        "gelaty"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "greengrocer",
+      "label_ar": "خضري",
+      "label_en": "Greengrocer",
+      "proximity_class": "walkable",
+      "osm_filter": "shop=greengrocer",
+      "prominence_class": "store",
+      "terms_ar": [
+        "خضار",
+        "فاكهاني",
+        "خضار وفاكهة",
+        "فكهاني",
+        "خضرى"
+      ],
+      "terms_en": [
+        "vegetables",
+        "fruit",
+        "fruits and vegetables",
+        "greengrocer"
+      ],
+      "terms_franco": [
+        "khodary",
+        "fakahany"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "spices",
+      "label_ar": "عطارة",
+      "label_en": "Spices & coffee",
+      "proximity_class": "walkable",
+      "osm_filter": "shop=spices",
+      "prominence_class": "store",
+      "terms_ar": [
+        "عطار",
+        "محمصة",
+        "مكسرات",
+        "تحميص بن",
+        "بن وتوابل",
+        "عطاره"
+      ],
+      "terms_en": [
+        "spices",
+        "coffee beans",
+        "roastery",
+        "nuts"
+      ],
+      "terms_franco": [
+        "3ettara",
+        "ma7masa"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "market",
+      "label_ar": "سوق",
+      "label_en": "Market",
+      "proximity_class": "local",
+      "osm_filter": "amenity=marketplace",
+      "prominence_class": "supermarket",
+      "terms_ar": [
+        "اسواق",
+        "أسواق",
+        "سوق خضار",
+        "سوق الجمعة",
+        "سويقة"
+      ],
+      "terms_en": [
+        "bazaar",
+        "souq",
+        "souk",
+        "marketplace"
+      ],
+      "terms_franco": [
+        "souq",
+        "soo2"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "clothing_store",
+      "label_ar": "محل ملابس",
+      "label_en": "Clothing store",
+      "proximity_class": "local",
+      "osm_filter": "shop=clothes",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ملابس",
+        "هدوم",
+        "لبس",
+        "بوتيك",
+        "ملابس حريمي",
+        "ملابس رجالي",
+        "ملابس اطفال",
+        "فساتين",
+        "عبايات",
+        "ملابس محجبات"
+      ],
+      "terms_en": [
+        "clothes",
+        "clothing",
+        "fashion",
+        "boutique",
+        "apparel"
+      ],
+      "terms_franco": [
+        "hodoom",
+        "malabes",
+        "lebs"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "shoe_store",
+      "label_ar": "محل جزم",
+      "label_en": "Shoe store",
+      "proximity_class": "local",
+      "osm_filter": "shop=shoes",
+      "prominence_class": "store",
+      "terms_ar": [
+        "احذية",
+        "أحذية",
+        "جزم",
+        "شوزات",
+        "كوتشي",
+        "كوتشيات",
+        "شنط",
+        "محل احذية"
+      ],
+      "terms_en": [
+        "shoes",
+        "sneakers",
+        "footwear",
+        "bags"
+      ],
+      "terms_franco": [
+        "gazam",
+        "kotshy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "jewelry_store",
+      "label_ar": "محل دهب",
+      "label_en": "Jewelry",
+      "proximity_class": "local",
+      "osm_filter": "shop=jewelry",
+      "prominence_class": "store",
+      "terms_ar": [
+        "دهب",
+        "ذهب",
+        "صاغة",
+        "مجوهرات",
+        "مصوغات",
+        "جواهرجي",
+        "فضة",
+        "ساعات",
+        "محل ذهب"
+      ],
+      "terms_en": [
+        "jewelry",
+        "jewellery",
+        "gold",
+        "watches",
+        "jeweler"
+      ],
+      "terms_franco": [
+        "dahab",
+        "sa3gha"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "optician",
+      "label_ar": "محل نظارات",
+      "label_en": "Optician",
+      "proximity_class": "local",
+      "osm_filter": "shop=optician",
+      "prominence_class": "store",
+      "terms_ar": [
+        "نظارات",
+        "نضارات",
+        "عدسات",
+        "بصريات",
+        "نظارات طبية",
+        "نظارات شمس"
+      ],
+      "terms_en": [
+        "optics",
+        "glasses",
+        "eyewear",
+        "optical",
+        "sunglasses"
+      ],
+      "terms_franco": [
+        "nadarat"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "perfume",
+      "label_ar": "محل عطور",
+      "label_en": "Perfume shop",
+      "proximity_class": "local",
+      "osm_filter": "shop=perfumery",
+      "prominence_class": "store",
+      "terms_ar": [
+        "عطور",
+        "برفانات",
+        "برفيوم",
+        "محل برفان"
+      ],
+      "terms_en": [
+        "perfume",
+        "perfumes",
+        "fragrance"
+      ],
+      "terms_franco": [
+        "3otoor",
+        "parfan"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "cosmetics",
+      "label_ar": "مستحضرات تجميل",
+      "label_en": "Cosmetics",
+      "proximity_class": "local",
+      "osm_filter": "shop=cosmetics",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ميكب",
+        "ميك اب",
+        "كوزمتكس",
+        "منتجات تجميل",
+        "ادوات تجميل"
+      ],
+      "terms_en": [
+        "cosmetics",
+        "makeup",
+        "beauty products",
+        "skincare"
+      ],
+      "terms_franco": [
+        "makeup",
+        "cosmatics"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "electronics_store",
+      "label_ar": "محل إلكترونيات",
+      "label_en": "Electronics store",
+      "proximity_class": "local",
+      "osm_filter": "shop=electronics",
+      "prominence_class": "store",
+      "terms_ar": [
+        "الكترونيات",
+        "إلكترونيات",
+        "كمبيوتر",
+        "لابتوب",
+        "لاب توب",
+        "كاميرات",
+        "محل كمبيوتر"
+      ],
+      "terms_en": [
+        "electronics",
+        "computers",
+        "laptop",
+        "computer shop"
+      ],
+      "terms_franco": [
+        "electroneyat",
+        "kombyoter"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "appliance_store",
+      "label_ar": "أجهزة كهربائية",
+      "label_en": "Home appliances",
+      "proximity_class": "local",
+      "osm_filter": "shop=appliance",
+      "prominence_class": "store",
+      "terms_ar": [
+        "اجهزة كهربائية",
+        "أجهزة منزلية",
+        "اجهزة منزلية",
+        "تلاجات",
+        "غسالات",
+        "تكييفات",
+        "بوتاجازات",
+        "شاشات"
+      ],
+      "terms_en": [
+        "appliances",
+        "home appliances",
+        "air conditioners",
+        "tv"
+      ],
+      "terms_franco": [
+        "agheza kahrabeya",
+        "takyeef"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "furniture_store",
+      "label_ar": "محل موبيليا",
+      "label_en": "Furniture store",
+      "proximity_class": "local",
+      "osm_filter": "shop=furniture",
+      "prominence_class": "store",
+      "terms_ar": [
+        "موبيليا",
+        "أثاث",
+        "اثاث",
+        "موبليات",
+        "مفروشات",
+        "مراتب",
+        "انتريه",
+        "غرف نوم",
+        "معرض اثاث"
+      ],
+      "terms_en": [
+        "furniture",
+        "home furniture",
+        "mattress"
+      ],
+      "terms_franco": [
+        "mobilia",
+        "asas"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "home_goods_store",
+      "label_ar": "أدوات منزلية",
+      "label_en": "Home goods",
+      "proximity_class": "local",
+      "osm_filter": "shop=houseware",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ادوات منزلية",
+        "خردوات",
+        "ادوات مطبخ",
+        "نجف",
+        "سجاد",
+        "ستائر",
+        "ديكور",
+        "مفارش"
+      ],
+      "terms_en": [
+        "housewares",
+        "home goods",
+        "kitchenware",
+        "decor",
+        "carpets",
+        "curtains"
+      ],
+      "terms_franco": [
+        "adawat manzeleya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "hardware_store",
+      "label_ar": "محل عدد وأدوات",
+      "label_en": "Hardware store",
+      "proximity_class": "local",
+      "osm_filter": "shop=hardware",
+      "prominence_class": "store",
+      "terms_ar": [
+        "عدد وادوات",
+        "ادوات صحية",
+        "أدوات صحية",
+        "بويات",
+        "دهانات",
+        "مواد بناء",
+        "سيراميك",
+        "كهرباء وسباكة",
+        "حدايد",
+        "خردة"
+      ],
+      "terms_en": [
+        "hardware",
+        "tools",
+        "paint",
+        "building materials",
+        "plumbing supplies",
+        "ceramics"
+      ],
+      "terms_franco": [
+        "3edad",
+        "bouyat"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "fabric_store",
+      "label_ar": "محل قماش",
+      "label_en": "Fabric store",
+      "proximity_class": "local",
+      "osm_filter": "shop=fabric",
+      "prominence_class": "store",
+      "terms_ar": [
+        "قماش",
+        "أقمشة",
+        "اقمشة",
+        "محل اقمشة"
+      ],
+      "terms_en": [
+        "fabric",
+        "textiles",
+        "fabrics"
+      ],
+      "terms_franco": [
+        "2omash"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "toy_store",
+      "label_ar": "محل لعب",
+      "label_en": "Toy store",
+      "proximity_class": "local",
+      "osm_filter": "shop=toys",
+      "prominence_class": "store",
+      "terms_ar": [
+        "لعب اطفال",
+        "لعب أطفال",
+        "العاب اطفال",
+        "محل العاب"
+      ],
+      "terms_en": [
+        "toys",
+        "toy shop",
+        "toy store"
+      ],
+      "terms_franco": [
+        "le3ab"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "gift_shop",
+      "label_ar": "محل هدايا",
+      "label_en": "Gift shop",
+      "proximity_class": "local",
+      "osm_filter": "shop=gift",
+      "prominence_class": "store",
+      "terms_ar": [
+        "هدايا",
+        "انتيكات",
+        "تحف",
+        "سوفنير",
+        "اكسسوارات",
+        "محل انتيكات"
+      ],
+      "terms_en": [
+        "gifts",
+        "souvenirs",
+        "antiques",
+        "accessories",
+        "gift shop"
+      ],
+      "terms_franco": [
+        "hadaya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "pet_store",
+      "label_ar": "محل حيوانات أليفة",
+      "label_en": "Pet shop",
+      "proximity_class": "local",
+      "osm_filter": "shop=pet",
+      "prominence_class": "store",
+      "terms_ar": [
+        "بت شوب",
+        "اكل قطط",
+        "اكل كلاب",
+        "طيور زينة",
+        "مستلزمات حيوانات"
+      ],
+      "terms_en": [
+        "pet shop",
+        "pet store",
+        "pet food",
+        "pets"
+      ],
+      "terms_franco": [
+        "pet shop"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "sports_store",
+      "label_ar": "محل أدوات رياضية",
+      "label_en": "Sports store",
+      "proximity_class": "local",
+      "osm_filter": "shop=sports",
+      "prominence_class": "store",
+      "terms_ar": [
+        "ادوات رياضية",
+        "أدوات رياضية",
+        "ملابس رياضية",
+        "لبس رياضي"
+      ],
+      "terms_en": [
+        "sports store",
+        "sporting goods",
+        "sportswear"
+      ],
+      "terms_franco": [
+        "adawat reyadeya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "beauty_salon",
+      "label_ar": "بيوتي سنتر",
+      "label_en": "Beauty salon",
+      "proximity_class": "local",
+      "osm_filter": "shop=beauty",
+      "prominence_class": "store",
+      "terms_ar": [
+        "صالون تجميل",
+        "كوافير حريمي",
+        "ميكب ارتست",
+        "مركز تجميل",
+        "اظافر",
+        "بيوتى سنتر"
+      ],
+      "terms_en": [
+        "beauty salon",
+        "beauty center",
+        "nails",
+        "makeup artist",
+        "beauty"
+      ],
+      "terms_franco": [
+        "beauty center",
+        "kwafeer 7arimy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "spa",
+      "label_ar": "سبا",
+      "label_en": "Spa",
+      "proximity_class": "local",
+      "prominence_class": "store",
+      "terms_ar": [
+        "مساج",
+        "حمام مغربي",
+        "مركز مساج",
+        "ساونا"
+      ],
+      "terms_en": [
+        "spa",
+        "massage",
+        "sauna",
+        "wellness"
+      ],
+      "terms_franco": [
+        "massage"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "tailor",
+      "label_ar": "ترزي",
+      "label_en": "Tailor",
+      "proximity_class": "walkable",
+      "osm_filter": "craft=tailor",
+      "prominence_class": "store",
+      "terms_ar": [
+        "خياط",
+        "تفصيل",
+        "تصليح ملابس",
+        "خياطة",
+        "ترزى"
+      ],
+      "terms_en": [
+        "tailor",
+        "alterations",
+        "sewing"
+      ],
+      "terms_franco": [
+        "tarzy",
+        "khayat"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "real_estate_agent",
+      "label_ar": "مكتب عقارات",
+      "label_en": "Real estate office",
+      "proximity_class": "local",
+      "osm_filter": "office=estate_agent",
+      "prominence_class": "store",
+      "terms_ar": [
+        "عقارات",
+        "سمسار",
+        "سمسرة",
+        "شقق للبيع",
+        "شقق للايجار",
+        "مكتب عقاري",
+        "تسويق عقاري",
+        "مكتب عقارى"
+      ],
+      "terms_en": [
+        "real estate",
+        "property",
+        "apartments for rent",
+        "broker",
+        "realtor"
+      ],
+      "terms_franco": [
+        "3a2arat",
+        "semsar"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "travel_agency",
+      "label_ar": "شركة سياحة",
+      "label_en": "Travel agency",
+      "proximity_class": "local",
+      "osm_filter": "office=travel_agent",
+      "prominence_class": "store",
+      "terms_ar": [
+        "سياحة",
+        "حجز طيران",
+        "تذاكر طيران",
+        "عمرة",
+        "حج وعمرة",
+        "رحلات",
+        "حجز فنادق",
+        "مكتب سياحة"
+      ],
+      "terms_en": [
+        "travel",
+        "flights",
+        "tours",
+        "umrah",
+        "tickets",
+        "travel agent"
+      ],
+      "terms_franco": [
+        "seya7a",
+        "3omra"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "lawyer",
+      "label_ar": "مكتب محاماة",
+      "label_en": "Lawyer",
+      "proximity_class": "local",
+      "osm_filter": "office=lawyer",
+      "prominence_class": "store",
+      "terms_ar": [
+        "محامي",
+        "محامى",
+        "محاماة",
+        "مستشار قانوني",
+        "مكتب محاماه"
+      ],
+      "terms_en": [
+        "lawyer",
+        "law firm",
+        "attorney",
+        "legal"
+      ],
+      "terms_franco": [
+        "mo7amy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "company",
+      "label_ar": "شركة",
+      "label_en": "Company",
+      "proximity_class": "local",
+      "osm_filter": "office=company",
+      "prominence_class": "store",
+      "terms_ar": [
+        "شركات",
+        "مقر شركة",
+        "مقر الشركة"
+      ],
+      "terms_en": [
+        "company",
+        "headquarters",
+        "firm",
+        "corporate office"
+      ],
+      "terms_franco": [
+        "sherka"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "factory",
+      "label_ar": "مصنع",
+      "label_en": "Factory",
+      "proximity_class": "destination",
+      "osm_filter": "man_made=works",
+      "prominence_class": "store",
+      "terms_ar": [
+        "مصانع",
+        "ورشة تصنيع"
+      ],
+      "terms_en": [
+        "factory",
+        "plant",
+        "manufacturing"
+      ],
+      "terms_franco": [
+        "masna3"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "shipping",
+      "label_ar": "شركة شحن",
+      "label_en": "Shipping & courier",
+      "proximity_class": "local",
+      "prominence_class": "store",
+      "terms_ar": [
+        "مكتب شحن",
+        "بوسطة",
+        "شركة توصيل",
+        "نقل بضائع",
+        "شحن دولي"
+      ],
+      "terms_en": [
+        "shipping",
+        "courier",
+        "delivery",
+        "cargo",
+        "freight"
+      ],
+      "terms_franco": [
+        "sha7n"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "ngo",
+      "label_ar": "جمعية",
+      "label_en": "Association",
+      "proximity_class": "local",
+      "osm_filter": "office=ngo",
+      "prominence_class": "government",
+      "terms_ar": [
+        "جمعية خيرية",
+        "مؤسسة خيرية",
+        "جمعيه",
+        "نقابة",
+        "نقابه"
+      ],
+      "terms_en": [
+        "ngo",
+        "charity",
+        "association",
+        "syndicate",
+        "foundation"
+      ],
+      "terms_franco": [
+        "gam3eya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "kindergarten",
+      "label_ar": "حضانة",
+      "label_en": "Nursery",
+      "proximity_class": "walkable",
+      "osm_filter": "amenity=kindergarten",
+      "prominence_class": "school",
+      "terms_ar": [
+        "حضانه",
+        "كي جي",
+        "روضة",
+        "روضة اطفال",
+        "حضانة اطفال"
+      ],
+      "terms_en": [
+        "nursery",
+        "kindergarten",
+        "daycare",
+        "kg",
+        "preschool"
+      ],
+      "terms_franco": [
+        "7adana"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "institute",
+      "label_ar": "معهد",
+      "label_en": "Institute",
+      "proximity_class": "local",
+      "prominence_class": "school",
+      "terms_ar": [
+        "معاهد",
+        "مركز تدريب",
+        "مركز لغات",
+        "كورسات",
+        "اكاديمية",
+        "أكاديمية"
+      ],
+      "terms_en": [
+        "institute",
+        "academy",
+        "training center",
+        "language center",
+        "courses"
+      ],
+      "terms_franco": [
+        "ma3had"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "tutoring",
+      "label_ar": "سنتر دروس",
+      "label_en": "Tutoring center",
+      "proximity_class": "walkable",
+      "prominence_class": "school",
+      "terms_ar": [
+        "سنتر تعليمي",
+        "دروس خصوصية",
+        "مجموعات تقوية",
+        "سنتر دروس خصوصية"
+      ],
+      "terms_en": [
+        "tutoring",
+        "study center",
+        "private lessons"
+      ],
+      "terms_franco": [
+        "senter doroos"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "library",
+      "label_ar": "مكتبة عامة",
+      "label_en": "Library",
+      "proximity_class": "local",
+      "osm_filter": "amenity=library",
+      "prominence_class": "government",
+      "terms_ar": [
+        "مكتبات عامة",
+        "دار كتب",
+        "مكتبة الطفل",
+        "دار الكتب"
+      ],
+      "terms_en": [
+        "library",
+        "public library"
+      ],
+      "terms_franco": [
+        "maktaba 3ama"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "museum",
+      "label_ar": "متحف",
+      "label_en": "Museum",
+      "proximity_class": "destination",
+      "osm_filter": "tourism=museum",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "متاحف",
+        "المتحف"
+      ],
+      "terms_en": [
+        "museum",
+        "museums"
+      ],
+      "terms_franco": [
+        "mat7af"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "historic_site",
+      "label_ar": "أثر",
+      "label_en": "Historic site",
+      "proximity_class": "destination",
+      "osm_filter": "historic=archaeological_site",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "آثار",
+        "اثار",
+        "معبد",
+        "قلعة",
+        "مقبرة فرعونية",
+        "منطقة اثرية",
+        "مكان تاريخي",
+        "مكان أثري"
+      ],
+      "terms_en": [
+        "historic site",
+        "temple",
+        "pyramid",
+        "castle",
+        "ruins",
+        "monument",
+        "tomb"
+      ],
+      "terms_franco": [
+        "asar",
+        "ma3bad"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "attraction",
+      "label_ar": "مزار سياحي",
+      "label_en": "Attraction",
+      "proximity_class": "destination",
+      "osm_filter": "tourism=attraction",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "معالم سياحية",
+        "مزارات",
+        "اماكن سياحية",
+        "فسحة",
+        "خروجة",
+        "اماكن خروج",
+        "مكان سياحي"
+      ],
+      "terms_en": [
+        "attraction",
+        "sightseeing",
+        "things to do",
+        "tourist attraction"
+      ],
+      "terms_franco": [
+        "khroga",
+        "fos7a"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "amusement_park",
+      "label_ar": "ملاهي",
+      "label_en": "Amusement park",
+      "proximity_class": "destination",
+      "osm_filter": "tourism=theme_park",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "مدينة ملاهي",
+        "ملاهى",
+        "اكوا بارك",
+        "دريم بارك",
+        "ملاهي اطفال"
+      ],
+      "terms_en": [
+        "amusement park",
+        "theme park",
+        "water park",
+        "aqua park"
+      ],
+      "terms_franco": [
+        "malahy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "beach",
+      "label_ar": "شاطئ",
+      "label_en": "Beach",
+      "proximity_class": "destination",
+      "osm_filter": "natural=beach",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "شط",
+        "بلاج",
+        "شاطيء",
+        "شواطئ",
+        "الشاطئ"
+      ],
+      "terms_en": [
+        "beach",
+        "beaches",
+        "plage"
+      ],
+      "terms_franco": [
+        "shat",
+        "plaj"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "cinema",
+      "label_ar": "سينما",
+      "label_en": "Cinema",
+      "proximity_class": "local",
+      "osm_filter": "amenity=cinema",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "سينمات",
+        "افلام",
+        "دار عرض"
+      ],
+      "terms_en": [
+        "cinema",
+        "movies",
+        "movie theater"
+      ],
+      "terms_franco": [
+        "senema"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "theater",
+      "label_ar": "مسرح",
+      "label_en": "Theater",
+      "proximity_class": "destination",
+      "osm_filter": "amenity=theatre",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "مسارح"
+      ],
+      "terms_en": [
+        "theatre",
+        "theater",
+        "opera",
+        "concert hall"
+      ],
+      "terms_franco": [
+        "masra7"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "cultural_center",
+      "label_ar": "مركز ثقافي",
+      "label_en": "Cultural center",
+      "proximity_class": "local",
+      "osm_filter": "amenity=arts_centre",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "قصر ثقافة",
+        "ساقية",
+        "بيت ثقافة",
+        "مركز فنون",
+        "قصر الثقافة"
+      ],
+      "terms_en": [
+        "cultural center",
+        "arts center",
+        "art gallery"
+      ],
+      "terms_franco": [
+        "2asr sa2afa"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "event_venue",
+      "label_ar": "قاعة أفراح",
+      "label_en": "Event venue",
+      "proximity_class": "local",
+      "osm_filter": "amenity=events_venue",
+      "prominence_class": "store",
+      "terms_ar": [
+        "قاعة افراح",
+        "قاعات افراح",
+        "قاعة مناسبات",
+        "دار مناسبات",
+        "قاعة فرح",
+        "قاعات مناسبات"
+      ],
+      "terms_en": [
+        "wedding hall",
+        "event venue",
+        "banquet hall",
+        "events hall"
+      ],
+      "terms_franco": [
+        "2a3et afra7"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "stadium",
+      "label_ar": "استاد",
+      "label_en": "Stadium",
+      "proximity_class": "destination",
+      "osm_filter": "leisure=stadium",
+      "prominence_class": "stadium",
+      "terms_ar": [
+        "ستاد",
+        "الاستاد",
+        "ملعب كبير"
+      ],
+      "terms_en": [
+        "stadium",
+        "arena"
+      ],
+      "terms_franco": [
+        "estad"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "sports_club",
+      "label_ar": "نادي",
+      "label_en": "Sports club",
+      "proximity_class": "local",
+      "osm_filter": "leisure=sports_centre",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "نوادي",
+        "نادى",
+        "نادي رياضي",
+        "نادي اجتماعي",
+        "النادي"
+      ],
+      "terms_en": [
+        "club",
+        "sports club",
+        "sporting club"
+      ],
+      "terms_franco": [
+        "nady"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "sports_field",
+      "label_ar": "ملعب",
+      "label_en": "Sports field",
+      "proximity_class": "walkable",
+      "osm_filter": "leisure=pitch",
+      "prominence_class": "gym",
+      "terms_ar": [
+        "ملاعب",
+        "ملعب كورة",
+        "ملعب خماسي",
+        "بادل",
+        "ملعب تنس",
+        "ملعب بادل"
+      ],
+      "terms_en": [
+        "pitch",
+        "football field",
+        "court",
+        "padel",
+        "tennis court"
+      ],
+      "terms_franco": [
+        "mal3ab"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "embassy",
+      "label_ar": "سفارة",
+      "label_en": "Embassy",
+      "proximity_class": "destination",
+      "osm_filter": "office=diplomatic",
+      "prominence_class": "government",
+      "terms_ar": [
+        "سفارات",
+        "قنصلية",
+        "سفاره"
+      ],
+      "terms_en": [
+        "embassy",
+        "consulate"
+      ],
+      "terms_franco": [
+        "safara"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "courthouse",
+      "label_ar": "محكمة",
+      "label_en": "Courthouse",
+      "proximity_class": "destination",
+      "osm_filter": "amenity=courthouse",
+      "prominence_class": "government",
+      "terms_ar": [
+        "محاكم",
+        "محكمه",
+        "نيابة",
+        "نيابه"
+      ],
+      "terms_en": [
+        "court",
+        "courthouse",
+        "prosecution office"
+      ],
+      "terms_franco": [
+        "ma7kama"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "civil_registry",
+      "label_ar": "سجل مدني",
+      "label_en": "Civil registry",
+      "proximity_class": "destination",
+      "prominence_class": "government",
+      "terms_ar": [
+        "السجل المدني",
+        "استخراج بطاقة",
+        "بطاقة رقم قومي",
+        "شهادة ميلاد",
+        "احوال مدنية",
+        "أحوال مدنية"
+      ],
+      "terms_en": [
+        "civil registry",
+        "id card office",
+        "birth certificate"
+      ],
+      "terms_franco": [
+        "sigel madany"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "fire_station",
+      "label_ar": "مطافي",
+      "label_en": "Fire station",
+      "proximity_class": "local",
+      "osm_filter": "amenity=fire_station",
+      "prominence_class": "government",
+      "terms_ar": [
+        "المطافي",
+        "مطافئ",
+        "الحماية المدنية",
+        "حماية مدنية"
+      ],
+      "terms_en": [
+        "fire station",
+        "fire department",
+        "civil defense"
+      ],
+      "terms_franco": [
+        "matafy"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "community_center",
+      "label_ar": "مركز شباب",
+      "label_en": "Youth center",
+      "proximity_class": "local",
+      "osm_filter": "amenity=community_centre",
+      "prominence_class": "government",
+      "terms_ar": [
+        "مراكز شباب",
+        "بيت شباب"
+      ],
+      "terms_en": [
+        "youth center",
+        "community center"
+      ],
+      "terms_franco": [
+        "markaz shabab"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "train_station",
+      "label_ar": "محطة قطر",
+      "label_en": "Train station",
+      "proximity_class": "destination",
+      "osm_filter": "railway=station",
+      "prominence_class": "train_station",
+      "terms_ar": [
+        "محطة قطار",
+        "محطة سكة حديد",
+        "سكة حديد",
+        "محطة القطر",
+        "القطار",
+        "محطة مصر"
+      ],
+      "terms_en": [
+        "train station",
+        "railway station",
+        "train"
+      ],
+      "terms_franco": [
+        "ma7atet 2atr",
+        "2atr"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "port",
+      "label_ar": "ميناء",
+      "label_en": "Port",
+      "proximity_class": "landmark",
+      "prominence_class": "airport",
+      "terms_ar": [
+        "الميناء",
+        "مرفأ",
+        "موانئ"
+      ],
+      "terms_en": [
+        "port",
+        "seaport",
+        "harbour",
+        "harbor",
+        "marina"
+      ],
+      "terms_franco": [
+        "mina2"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "ferry",
+      "label_ar": "معدية",
+      "label_en": "Ferry",
+      "proximity_class": "local",
+      "osm_filter": "amenity=ferry_terminal",
+      "prominence_class": "bus_station",
+      "terms_ar": [
+        "معديه",
+        "عبارة",
+        "مرسى المعدية"
+      ],
+      "terms_en": [
+        "ferry",
+        "water taxi",
+        "ferry terminal"
+      ],
+      "terms_franco": [
+        "ma3deya"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "rest_area",
+      "label_ar": "استراحة",
+      "label_en": "Rest area",
+      "proximity_class": "destination",
+      "osm_filter": "highway=rest_area",
+      "prominence_class": "gas_station",
+      "terms_ar": [
+        "استراحه",
+        "استراحة الطريق",
+        "محطة استراحة"
+      ],
+      "terms_en": [
+        "rest area",
+        "rest stop",
+        "services"
+      ],
+      "terms_franco": [
+        "estera7a"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "square",
+      "label_ar": "ميدان",
+      "label_en": "Square",
+      "proximity_class": "local",
+      "osm_filter": "place=square",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "ميادين",
+        "صينية"
+      ],
+      "terms_en": [
+        "square",
+        "roundabout",
+        "circle"
+      ],
+      "terms_franco": [
+        "midan"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "bridge",
+      "label_ar": "كوبري",
+      "label_en": "Bridge",
+      "proximity_class": "local",
+      "osm_filter": "man_made=bridge",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "كباري",
+        "جسر",
+        "الكوبري"
+      ],
+      "terms_en": [
+        "bridge",
+        "flyover",
+        "overpass"
+      ],
+      "terms_franco": [
+        "kobry"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "compound",
+      "label_ar": "كمبوند",
+      "label_en": "Compound",
+      "proximity_class": "destination",
+      "osm_filter": "landuse=residential",
+      "prominence_class": "tourist_attraction",
+      "terms_ar": [
+        "كومباوند",
+        "كمباوند",
+        "مجمع سكني",
+        "تجمع سكني"
+      ],
+      "terms_en": [
+        "compound",
+        "gated community",
+        "residence"
+      ],
+      "terms_franco": [
+        "compound"
+      ],
+      "quick_chip": false
+    },
+    {
+      "id": "cemetery",
+      "label_ar": "مقابر",
+      "label_en": "Cemetery",
+      "proximity_class": "local",
+      "osm_filter": "landuse=cemetery",
+      "prominence_class": "mosque",
+      "terms_ar": [
+        "مدافن",
+        "ترب",
+        "جبانة",
+        "مقبرة",
+        "المقابر"
+      ],
+      "terms_en": [
+        "cemetery",
+        "graveyard",
+        "tombs"
+      ],
+      "terms_franco": [
+        "ma2aber",
+        "torab"
+      ],
+      "quick_chip": false
+    }
+  ],
+  "intents": [
+    {
+      "category_id": "transmission_repair",
+      "phrases": [
+        "تصليح فتيس",
+        "الفتيس بيخبط",
+        "الفتيس بيضرب",
+        "فتيس بيخبط",
+        "مشكلة في الفتيس",
+        "الفتيس مش بيدخل",
+        "الجير بيخبط",
+        "الجير مش بيدخل",
+        "gearbox problem",
+        "transmission problem",
+        "clutch problem",
+        "fetees",
+        "el fetees"
+      ],
+      "confidence": 0.95,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "roadside_assistance",
+      "phrases": [
+        "عربيتي واقفة",
+        "العربية واقفة",
+        "عربيتي وقفت",
+        "العربية وقفت",
+        "عربيتي عطلت",
+        "العربية عطلت",
+        "محتاج ونش",
+        "عايز ونش",
+        "car broke down",
+        "need a tow",
+        "car wont start"
+      ],
+      "confidence": 0.9,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "battery_shop",
+      "phrases": [
+        "بطارية فصلت",
+        "البطارية فصلت",
+        "البطاريه فاصلة",
+        "بطارية العربية فصلت",
+        "عايز اشحن البطارية",
+        "محتاج بطارية",
+        "battery dead",
+        "dead battery",
+        "jump start"
+      ],
+      "confidence": 0.92,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "tyre_shop",
+      "phrases": [
+        "كاوتش نايم",
+        "الكاوتش نايم",
+        "كاوتش مفشوش",
+        "عندي بنشر",
+        "عايز اغير كاوتش",
+        "كاوتش فاضي",
+        "flat tyre",
+        "flat tire",
+        "puncture",
+        "need new tyres"
+      ],
+      "confidence": 0.93,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "gas_station",
+      "phrases": [
+        "التنك فاضي",
+        "الخزان فاضي",
+        "عايز افل بنزين",
+        "محتاج بنزين",
+        "عايز اضرب بنزين",
+        "need fuel",
+        "tank is empty",
+        "fill up",
+        "need petrol",
+        "out of gas"
+      ],
+      "confidence": 0.9,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "oil_change",
+      "phrases": [
+        "عايز اغير الزيت",
+        "تغيير الزيت",
+        "موعد تغيير الزيت",
+        "oil change",
+        "change the oil"
+      ],
+      "confidence": 0.72,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "body_shop",
+      "phrases": [
+        "العربية اتخبطت",
+        "عربيتي اتخبطت",
+        "عايز اسمكر",
+        "شخط في العربية",
+        "عايز ادهن العربية",
+        "dented my car",
+        "car scratched"
+      ],
+      "confidence": 0.88,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "car_repair",
+      "phrases": [
+        "العربية بتسخن",
+        "صوت في الموتور",
+        "عايز ميكانيكي",
+        "العربية عايزة صيانة",
+        "engine noise",
+        "car overheating",
+        "need a mechanic"
+      ],
+      "confidence": 0.7,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "dentist",
+      "phrases": [
+        "وجعني ضرسي",
+        "ضرسي بيوجعني",
+        "وجع في الضرس",
+        "سني بيوجعني",
+        "الم في الاسنان",
+        "حشو ضرس",
+        "خلع ضرس",
+        "tooth pain",
+        "toothache",
+        "my tooth hurts"
+      ],
+      "confidence": 0.95,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "pharmacy",
+      "phrases": [
+        "عايز دوا",
+        "محتاج دواء",
+        "عايز اجيب دوا",
+        "روشتة",
+        "وصفة طبية",
+        "need medicine",
+        "prescription"
+      ],
+      "confidence": 0.88,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "hospital",
+      "phrases": [
+        "حالة طوارئ",
+        "اسعاف",
+        "إسعاف",
+        "محتاج طوارئ",
+        "حادثة",
+        "emergency",
+        "ambulance",
+        "accident"
+      ],
+      "confidence": 0.93,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "medical_lab",
+      "phrases": [
+        "عايز اعمل تحليل",
+        "تحليل دم",
+        "محتاج تحاليل",
+        "blood test",
+        "lab test"
+      ],
+      "confidence": 0.85,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "radiology",
+      "phrases": [
+        "عايز اعمل اشعة",
+        "محتاج اشعة",
+        "رنين مغناطيسي",
+        "اشعة مقطعية",
+        "need an x-ray",
+        "mri scan"
+      ],
+      "confidence": 0.85,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "print_shop",
+      "phrases": [
+        "عايز اصور ورق",
+        "تصوير مستندات",
+        "عايز اطبع",
+        "محتاج طباعة",
+        "عايز اصور اوراق",
+        "نسخة من البطاقة",
+        "print documents",
+        "photocopy",
+        "need to print"
+      ],
+      "confidence": 0.92,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "atm",
+      "phrases": [
+        "اسحب فلوس",
+        "عايز اسحب فلوس",
+        "محتاج فلوس",
+        "سحب نقدي",
+        "عايز كاش",
+        "withdraw cash",
+        "need cash",
+        "get money"
+      ],
+      "confidence": 0.93,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "electricity_payment",
+      "phrases": [
+        "عايز اشحن الكهربا",
+        "شحن كارت الكهربا",
+        "عايز ادفع الكهربا",
+        "كارت الكهربا",
+        "فاتورة الكهربا",
+        "عداد الكهربا",
+        "pay electricity",
+        "top up electricity",
+        "electricity card"
+      ],
+      "confidence": 0.9,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "laundry",
+      "phrases": [
+        "عايز اكوي",
+        "كي هدوم",
+        "غسيل هدوم",
+        "عايز اغسل بدلة",
+        "dry cleaning",
+        "iron clothes"
+      ],
+      "confidence": 0.88,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "notary",
+      "phrases": [
+        "عايز اعمل توكيل",
+        "توثيق عقد",
+        "محتاج توكيل",
+        "power of attorney",
+        "notarise"
+      ],
+      "confidence": 0.86,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "traffic_department",
+      "phrases": [
+        "عايز اجدد الرخصة",
+        "تجديد رخصة",
+        "رخصة القيادة",
+        "ترخيص العربية",
+        "مخالفات مرورية",
+        "renew licence",
+        "driving licence",
+        "car licence"
+      ],
+      "confidence": 0.86,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "plumber",
+      "phrases": [
+        "المواسير بتنقط",
+        "عندي تسريب مياه",
+        "الحوض مسدود",
+        "المجاري مسدودة",
+        "water leak",
+        "blocked drain"
+      ],
+      "confidence": 0.88,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "electrician",
+      "phrases": [
+        "الكهربا فصلت",
+        "عطل كهربا",
+        "الفيش مش شغال",
+        "محتاج كهربائي",
+        "power out",
+        "electrical fault"
+      ],
+      "confidence": 0.85,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "mobile_shop",
+      "phrases": [
+        "شاشة الموبايل اتكسرت",
+        "عايز اصلح الموبايل",
+        "شاحن موبايل",
+        "عايز اشتري موبايل",
+        "broken screen",
+        "fix my phone"
+      ],
+      "confidence": 0.82,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "koshary",
+      "phrases": [
+        "كشري",
+        "كشرى",
+        "نفسي في كشري",
+        "koshary",
+        "kushari"
+      ],
+      "confidence": 0.9,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "grill",
+      "phrases": [
+        "كباب",
+        "كفتة",
+        "حمام محشي",
+        "شاورما",
+        "فراخ مشوية",
+        "نفسي في مشويات",
+        "kebab",
+        "kofta",
+        "shawarma",
+        "grilled chicken"
+      ],
+      "confidence": 0.85,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "seafood",
+      "phrases": [
+        "سمك",
+        "جمبري",
+        "كاليماري",
+        "نفسي في سمك",
+        "fish",
+        "shrimp",
+        "calamari"
+      ],
+      "confidence": 0.85,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "pizza",
+      "phrases": [
+        "بيتزا",
+        "فطير مشلتت",
+        "pizza",
+        "fateer"
+      ],
+      "confidence": 0.9,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "burger",
+      "phrases": [
+        "برجر",
+        "برغر",
+        "burger",
+        "cheeseburger"
+      ],
+      "confidence": 0.9,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "sweets",
+      "phrases": [
+        "كنافة",
+        "بسبوسة",
+        "ام علي",
+        "تورتة",
+        "جاتوه",
+        "نفسي في حاجة حلوة",
+        "konafa",
+        "basbousa",
+        "cake",
+        "dessert"
+      ],
+      "confidence": 0.85,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "juice_bar",
+      "phrases": [
+        "عصير قصب",
+        "عصير مانجا",
+        "نفسي في عصير",
+        "sugarcane juice"
+      ],
+      "confidence": 0.82,
+      "requires_all_tokens": false
+    },
+    {
+      "category_id": "bakery",
+      "phrases": [
+        "عايز عيش",
+        "محتاج عيش",
+        "رغيف عيش",
+        "need bread"
+      ],
+      "confidence": 0.8,
+      "requires_all_tokens": true
+    },
+    {
+      "category_id": "cafe",
+      "phrases": [
+        "عايز اشرب قهوة",
+        "نفسي في قهوة",
+        "مكان اقعد فيه",
+        "مكان للمذاكرة",
+        "somewhere to work",
+        "place to study",
+        "need coffee"
+      ],
+      "confidence": 0.78,
+      "requires_all_tokens": true
+    }
+  ],
+  "medicines": [
+    "بانادول",
+    "كتافلام",
+    "بروفين",
+    "اوجمنتين",
+    "كونجستال",
+    "فوار",
+    "انتينال",
+    "موتيليوم",
+    "فلاجيل",
+    "زيثروماكس",
+    "كلاريتين",
+    "سيتال",
+    "ابيمول",
+    "ريفو",
+    "دولفين",
+    "نو سبا",
+    "ديكلوفين",
+    "الفنتين",
+    "تلفاست",
+    "زيرتك",
+    "برايمر",
+    "ديجستين",
+    "مالوكس",
+    "انسولين",
+    "panadol",
+    "cataflam",
+    "brufen",
+    "augmentin",
+    "congestal",
+    "antinal",
+    "motilium",
+    "flagyl",
+    "zithromax",
+    "claritine",
+    "cetal",
+    "abimol",
+    "rivo",
+    "telfast",
+    "zyrtec",
+    "maalox",
+    "insulin",
+    "ventolin"
+  ],
+  "brands": [
+    {
+      "id": "nbe",
+      "display_ar": "البنك الأهلي المصري",
+      "display_en": "National Bank of Egypt",
+      "category_id": "bank",
+      "aliases": [
+        "اهلي",
+        "الاهلي",
+        "البنك الاهلى",
+        "الاهلى",
+        "بنك اهلي",
+        "البنك الأهلي",
+        "nbe",
+        "ahly bank",
+        "al ahly",
+        "el ahly bank",
+        "bank ahly"
+      ],
+      "search_term": "البنك الاهلي المصري",
+      "international": false
+    },
+    {
+      "id": "banque_misr",
+      "display_ar": "بنك مصر",
+      "display_en": "Banque Misr",
+      "category_id": "bank",
+      "aliases": [
+        "مصر",
+        "بنك مصر",
+        "banque misr",
+        "bank misr",
+        "bank masr",
+        "banque masr"
+      ],
+      "search_term": "بنك مصر",
+      "international": false
+    },
+    {
+      "id": "cib",
+      "display_ar": "البنك التجاري الدولي",
+      "display_en": "CIB",
+      "category_id": "bank",
+      "aliases": [
+        "سي اي بي",
+        "البنك التجارى الدولى",
+        "cib",
+        "commercial international bank",
+        "c.i.b"
+      ],
+      "search_term": "CIB بنك",
+      "international": false
+    },
+    {
+      "id": "qnb",
+      "display_ar": "بنك قطر الوطني",
+      "display_en": "QNB Alahli",
+      "category_id": "bank",
+      "aliases": [
+        "كيو ان بي",
+        "qnb",
+        "qnb alahli",
+        "qatar national bank"
+      ],
+      "search_term": "QNB الأهلي",
+      "international": false
+    },
+    {
+      "id": "banque_du_caire",
+      "display_ar": "بنك القاهرة",
+      "display_en": "Banque du Caire",
+      "category_id": "bank",
+      "aliases": [
+        "بنك القاهره",
+        "banque du caire",
+        "bank el qahera",
+        "bdc"
+      ],
+      "search_term": "بنك القاهرة",
+      "international": false
+    },
+    {
+      "id": "alex_bank",
+      "display_ar": "بنك الإسكندرية",
+      "display_en": "Alexbank",
+      "category_id": "bank",
+      "aliases": [
+        "بنك الاسكندرية",
+        "alexbank",
+        "alex bank"
+      ],
+      "search_term": "بنك الإسكندرية",
+      "international": false
+    },
+    {
+      "id": "hsbc_eg",
+      "display_ar": "بنك اتش اس بي سي",
+      "display_en": "HSBC Egypt",
+      "category_id": "bank",
+      "aliases": [
+        "اتش اس بي سي",
+        "hsbc"
+      ],
+      "search_term": "بنك اتش اس بي سي",
+      "international": true
+    },
+    {
+      "id": "adib_eg",
+      "display_ar": "مصرف أبوظبي الإسلامي",
+      "display_en": "ADIB Egypt",
+      "category_id": "bank",
+      "aliases": [
+        "ابوظبي الاسلامي",
+        "adib"
+      ],
+      "search_term": "مصرف أبوظبي الإسلامي",
+      "international": false
+    },
+    {
+      "id": "faisal_bank",
+      "display_ar": "بنك فيصل الإسلامي",
+      "display_en": "Faisal Islamic Bank",
+      "category_id": "bank",
+      "aliases": [
+        "بنك فيصل",
+        "faisal islamic bank",
+        "faisal bank"
+      ],
+      "search_term": "بنك فيصل الإسلامي",
+      "international": false
+    },
+    {
+      "id": "housing_bank",
+      "display_ar": "بنك التعمير والإسكان",
+      "display_en": "Housing & Development Bank",
+      "category_id": "bank",
+      "aliases": [
+        "التعمير والاسكان",
+        "hdb",
+        "housing bank"
+      ],
+      "search_term": "بنك التعمير والإسكان",
+      "international": false
+    },
+    {
+      "id": "seif",
+      "display_ar": "صيدليات سيف",
+      "display_en": "Seif Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "سيف",
+        "صيدلية سيف",
+        "seif",
+        "seif pharmacy",
+        "sief"
+      ],
+      "search_term": "صيدلية سيف",
+      "international": false
+    },
+    {
+      "id": "ezaby",
+      "display_ar": "صيدليات العزبي",
+      "display_en": "El Ezaby Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "العزبي",
+        "عزبي",
+        "صيدلية العزبي",
+        "ezaby",
+        "el ezaby",
+        "elezaby"
+      ],
+      "search_term": "صيدلية العزبي",
+      "international": false
+    },
+    {
+      "id": "roshta",
+      "display_ar": "صيدليات روشتة",
+      "display_en": "Roshetta Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "روشتة",
+        "روشته",
+        "roshetta",
+        "roshta"
+      ],
+      "search_term": "صيدلية روشتة",
+      "international": false
+    },
+    {
+      "id": "nineteen_eleven",
+      "display_ar": "صيدليات 19011",
+      "display_en": "19011 Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "19011",
+        "صيدليات 19011"
+      ],
+      "search_term": "صيدلية 19011",
+      "international": false
+    },
+    {
+      "id": "wellcare",
+      "display_ar": "صيدليات ويلكير",
+      "display_en": "Wellcare Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "ويلكير",
+        "wellcare"
+      ],
+      "search_term": "صيدليات ويلكير",
+      "international": false
+    },
+    {
+      "id": "misr_pharmacies",
+      "display_ar": "صيدليات مصر",
+      "display_en": "Misr Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "صيدليات مصر",
+        "misr pharmacies"
+      ],
+      "search_term": "صيدليات مصر",
+      "international": false
+    },
+    {
+      "id": "carrefour",
+      "display_ar": "كارفور",
+      "display_en": "Carrefour",
+      "category_id": "supermarket",
+      "aliases": [
+        "كارفور",
+        "carrefour",
+        "carefour",
+        "carfour"
+      ],
+      "search_term": "كارفور",
+      "international": true
+    },
+    {
+      "id": "kazyon",
+      "display_ar": "كازيون",
+      "display_en": "Kazyon",
+      "category_id": "supermarket",
+      "aliases": [
+        "كازيون",
+        "kazyon",
+        "kazion"
+      ],
+      "search_term": "كازيون",
+      "international": false
+    },
+    {
+      "id": "saudi_market",
+      "display_ar": "سعودي ماركت",
+      "display_en": "Saudi Market",
+      "category_id": "supermarket",
+      "aliases": [
+        "سعودي",
+        "سعودى ماركت",
+        "saudi market",
+        "saudi supermarket"
+      ],
+      "search_term": "سعودي ماركت",
+      "international": false
+    },
+    {
+      "id": "oscar",
+      "display_ar": "أوسكار",
+      "display_en": "Oscar Grand Stores",
+      "category_id": "supermarket",
+      "aliases": [
+        "اوسكار",
+        "oscar",
+        "oscar market"
+      ],
+      "search_term": "أوسكار",
+      "international": false
+    },
+    {
+      "id": "hyper_one",
+      "display_ar": "هايبر وان",
+      "display_en": "Hyper One",
+      "category_id": "supermarket",
+      "aliases": [
+        "هايبر وان",
+        "هايبروان",
+        "hyper one",
+        "hyperone"
+      ],
+      "search_term": "هايبر وان",
+      "international": false
+    },
+    {
+      "id": "spinneys",
+      "display_ar": "سبينس",
+      "display_en": "Spinneys",
+      "category_id": "supermarket",
+      "aliases": [
+        "سبينس",
+        "سبينيز",
+        "سبينز",
+        "spinneys",
+        "spinnys"
+      ],
+      "search_term": "سبينس",
+      "international": true
+    },
+    {
+      "id": "gomla_market",
+      "display_ar": "جملة ماركت",
+      "display_en": "Gomla Market",
+      "category_id": "supermarket",
+      "aliases": [
+        "جملة ماركت",
+        "gomla market"
+      ],
+      "search_term": "جملة ماركت",
+      "international": false
+    },
+    {
+      "id": "metro_market",
+      "display_ar": "مترو ماركت",
+      "display_en": "Metro Market",
+      "category_id": "supermarket",
+      "aliases": [
+        "مترو ماركت",
+        "metro market"
+      ],
+      "search_term": "مترو ماركت",
+      "international": false
+    },
+    {
+      "id": "seoudi",
+      "display_ar": "سيودي ماركت",
+      "display_en": "Seoudi Supermarket",
+      "category_id": "supermarket",
+      "aliases": [
+        "سيودي",
+        "seoudi"
+      ],
+      "search_term": "سيودي ماركت",
+      "international": false
+    },
+    {
+      "id": "total",
+      "display_ar": "توتال",
+      "display_en": "TotalEnergies",
+      "category_id": "gas_station",
+      "aliases": [
+        "توتال",
+        "total",
+        "totalenergies",
+        "total energies"
+      ],
+      "search_term": "توتال",
+      "international": true
+    },
+    {
+      "id": "mobil",
+      "display_ar": "موبيل",
+      "display_en": "Mobil",
+      "category_id": "gas_station",
+      "aliases": [
+        "موبيل",
+        "mobil",
+        "exxonmobil"
+      ],
+      "search_term": "موبيل",
+      "international": true
+    },
+    {
+      "id": "wataneya",
+      "display_ar": "وطنية",
+      "display_en": "Wataneya",
+      "category_id": "gas_station",
+      "aliases": [
+        "وطنية",
+        "وطنيه",
+        "wataneya",
+        "watania"
+      ],
+      "search_term": "وطنية",
+      "international": false
+    },
+    {
+      "id": "cooperation",
+      "display_ar": "التعاون",
+      "display_en": "Co-operation Petroleum",
+      "category_id": "gas_station",
+      "aliases": [
+        "تعاون",
+        "التعاون",
+        "ta3awon",
+        "cooperation"
+      ],
+      "search_term": "التعاون",
+      "international": false
+    },
+    {
+      "id": "shell_eg",
+      "display_ar": "شل",
+      "display_en": "Shell",
+      "category_id": "gas_station",
+      "aliases": [
+        "شل",
+        "shell",
+        "shell out"
+      ],
+      "search_term": "شل",
+      "international": true
+    },
+    {
+      "id": "chillout",
+      "display_ar": "شيل أوت",
+      "display_en": "ChillOut",
+      "category_id": "gas_station",
+      "aliases": [
+        "شيل اوت",
+        "chillout",
+        "chill out"
+      ],
+      "search_term": "شيل أوت",
+      "international": false
+    },
+    {
+      "id": "emarat_misr",
+      "display_ar": "إمارات مصر",
+      "display_en": "Emarat Misr",
+      "category_id": "gas_station",
+      "aliases": [
+        "امارات مصر",
+        "emarat misr",
+        "emarat"
+      ],
+      "search_term": "إمارات مصر",
+      "international": false
+    },
+    {
+      "id": "vodafone",
+      "display_ar": "فودافون",
+      "display_en": "Vodafone",
+      "category_id": "mobile_shop",
+      "aliases": [
+        "فودافون",
+        "vodafone",
+        "voda"
+      ],
+      "search_term": "فودافون",
+      "international": true
+    },
+    {
+      "id": "orange_eg",
+      "display_ar": "أورنج",
+      "display_en": "Orange",
+      "category_id": "mobile_shop",
+      "aliases": [
+        "اورنج",
+        "اورانج",
+        "orange"
+      ],
+      "search_term": "أورنج",
+      "international": true
+    },
+    {
+      "id": "etisalat_eg",
+      "display_ar": "اتصالات",
+      "display_en": "Etisalat by e&",
+      "category_id": "mobile_shop",
+      "aliases": [
+        "اتصالات",
+        "etisalat",
+        "e and",
+        "e&"
+      ],
+      "search_term": "اتصالات",
+      "international": false
+    },
+    {
+      "id": "we_eg",
+      "display_ar": "وي",
+      "display_en": "WE",
+      "category_id": "mobile_shop",
+      "aliases": [
+        "وي",
+        "we",
+        "telecom egypt",
+        "المصرية للاتصالات"
+      ],
+      "search_term": "وي المصرية للاتصالات",
+      "international": false
+    },
+    {
+      "id": "mcdonalds",
+      "display_ar": "ماكدونالدز",
+      "display_en": "McDonald's",
+      "category_id": "burger",
+      "aliases": [
+        "ماكدونالدز",
+        "ماك",
+        "مكدونالدز",
+        "mcdonalds",
+        "mac",
+        "mcdonald",
+        "macdonalds"
+      ],
+      "search_term": "ماكدونالدز",
+      "international": true
+    },
+    {
+      "id": "kfc",
+      "display_ar": "كنتاكي",
+      "display_en": "KFC",
+      "category_id": "restaurant",
+      "aliases": [
+        "كنتاكي",
+        "كنتاكى",
+        "kfc",
+        "kentucky"
+      ],
+      "search_term": "كنتاكي",
+      "international": true
+    },
+    {
+      "id": "pizza_king",
+      "display_ar": "بيتزا كنج",
+      "display_en": "Pizza King",
+      "category_id": "pizza",
+      "aliases": [
+        "بيتزا كنج",
+        "pizza king"
+      ],
+      "search_term": "بيتزا كنج",
+      "international": false
+    },
+    {
+      "id": "pizza_hut",
+      "display_ar": "بيتزا هت",
+      "display_en": "Pizza Hut",
+      "category_id": "pizza",
+      "aliases": [
+        "بيتزا هت",
+        "pizza hut"
+      ],
+      "search_term": "بيتزا هت",
+      "international": true
+    },
+    {
+      "id": "momen",
+      "display_ar": "مؤمن",
+      "display_en": "Mo’men",
+      "category_id": "burger",
+      "aliases": [
+        "مؤمن",
+        "مومن",
+        "momen",
+        "mo men"
+      ],
+      "search_term": "مؤمن",
+      "international": false
+    },
+    {
+      "id": "buffalo_burger",
+      "display_ar": "بافلو برجر",
+      "display_en": "Buffalo Burger",
+      "category_id": "burger",
+      "aliases": [
+        "بافلو",
+        "بافلو برجر",
+        "buffalo",
+        "buffalo burger"
+      ],
+      "search_term": "بافلو برجر",
+      "international": false
+    },
+    {
+      "id": "cilantro",
+      "display_ar": "سيلانترو",
+      "display_en": "Cilantro",
+      "category_id": "cafe",
+      "aliases": [
+        "سيلانترو",
+        "cilantro",
+        "silantro"
+      ],
+      "search_term": "سيلانترو",
+      "international": false
+    },
+    {
+      "id": "costa",
+      "display_ar": "كوستا",
+      "display_en": "Costa Coffee",
+      "category_id": "cafe",
+      "aliases": [
+        "كوستا",
+        "costa",
+        "costa coffee"
+      ],
+      "search_term": "كوستا",
+      "international": true
+    },
+    {
+      "id": "starbucks",
+      "display_ar": "ستاربكس",
+      "display_en": "Starbucks",
+      "category_id": "cafe",
+      "aliases": [
+        "ستاربكس",
+        "starbucks",
+        "starbuks"
+      ],
+      "search_term": "ستاربكس",
+      "international": true
+    },
+    {
+      "id": "abou_shakra",
+      "display_ar": "أبو شقرة",
+      "display_en": "Abou Shakra",
+      "category_id": "grill",
+      "aliases": [
+        "ابو شقرة",
+        "ابو شقره",
+        "abou shakra",
+        "abu shakra"
+      ],
+      "search_term": "أبو شقرة",
+      "international": false
+    },
+    {
+      "id": "gad",
+      "display_ar": "جاد",
+      "display_en": "Gad",
+      "category_id": "restaurant",
+      "aliases": [
+        "جاد",
+        "مطاعم جاد",
+        "gad",
+        "gad restaurant"
+      ],
+      "search_term": "مطعم جاد",
+      "international": false
+    },
+    {
+      "id": "bazooka",
+      "display_ar": "بازوكا",
+      "display_en": "Bazooka",
+      "category_id": "grill",
+      "aliases": [
+        "بازوكا",
+        "bazooka",
+        "bazoka"
+      ],
+      "search_term": "بازوكا",
+      "international": false
+    },
+    {
+      "id": "koshary_abou_tarek",
+      "display_ar": "كشري أبو طارق",
+      "display_en": "Koshary Abou Tarek",
+      "category_id": "koshary",
+      "aliases": [
+        "ابو طارق",
+        "كشري ابو طارق",
+        "abou tarek",
+        "abu tarek"
+      ],
+      "search_term": "كشري أبو طارق",
+      "international": false
+    },
+    {
+      "id": "cook_door",
+      "display_ar": "كوك دور",
+      "display_en": "Cook Door",
+      "category_id": "burger",
+      "aliases": [
+        "كوك دور",
+        "cook door",
+        "cookdoor"
+      ],
+      "search_term": "كوك دور",
+      "international": false
+    },
+    {
+      "id": "mansour_sweets",
+      "display_ar": "حلواني منصور",
+      "display_en": "Mansour Sweets",
+      "category_id": "sweets",
+      "aliases": [
+        "منصور",
+        "حلواني منصور",
+        "mansour sweets"
+      ],
+      "search_term": "حلواني منصور",
+      "international": false
+    },
+    {
+      "id": "tseppas",
+      "display_ar": "تسيباس",
+      "display_en": "Tseppas",
+      "category_id": "sweets",
+      "aliases": [
+        "تسيباس",
+        "tseppas"
+      ],
+      "search_term": "تسيباس",
+      "international": false
+    },
+    {
+      "id": "el_abd",
+      "display_ar": "العبد",
+      "display_en": "El Abd Patisserie",
+      "category_id": "sweets",
+      "aliases": [
+        "العبد",
+        "حلواني العبد",
+        "el abd",
+        "elabd"
+      ],
+      "search_term": "حلواني العبد",
+      "international": false
+    },
+    {
+      "id": "gold_gym",
+      "display_ar": "جولدز جيم",
+      "display_en": "Gold's Gym",
+      "category_id": "gym",
+      "aliases": [
+        "جولدز جيم",
+        "جولد جيم",
+        "golds gym",
+        "gold gym"
+      ],
+      "search_term": "جولدز جيم",
+      "international": true
+    },
+    {
+      "id": "smart_gym",
+      "display_ar": "سمارت جيم",
+      "display_en": "Smart Gym",
+      "category_id": "gym",
+      "aliases": [
+        "سمارت جيم",
+        "smart gym"
+      ],
+      "search_term": "سمارت جيم",
+      "international": false
+    },
+    {
+      "id": "fitness_first",
+      "display_ar": "فيتنس فيرست",
+      "display_en": "Fitness First",
+      "category_id": "gym",
+      "aliases": [
+        "فيتنس فيرست",
+        "fitness first"
+      ],
+      "search_term": "فيتنس فيرست",
+      "international": true
+    },
+    {
+      "id": "alfa_lab",
+      "display_ar": "ألفا لاب",
+      "display_en": "Alfa Laboratories",
+      "category_id": "medical_lab",
+      "aliases": [
+        "الفا لاب",
+        "الفا",
+        "alfa lab",
+        "alfa laboratories"
+      ],
+      "search_term": "ألفا لاب",
+      "international": false
+    },
+    {
+      "id": "almokhtabar",
+      "display_ar": "المختبر",
+      "display_en": "Al Mokhtabar",
+      "category_id": "medical_lab",
+      "aliases": [
+        "المختبر",
+        "al mokhtabar",
+        "mokhtabar"
+      ],
+      "search_term": "المختبر",
+      "international": false
+    },
+    {
+      "id": "borg_lab",
+      "display_ar": "البرج",
+      "display_en": "Borg Laboratories",
+      "category_id": "medical_lab",
+      "aliases": [
+        "معامل البرج",
+        "البرج",
+        "borg lab",
+        "borg laboratories"
+      ],
+      "search_term": "معامل البرج",
+      "international": false
+    },
+    {
+      "id": "cleopatra_hospital",
+      "display_ar": "مستشفى كليوباترا",
+      "display_en": "Cleopatra Hospital",
+      "category_id": "hospital",
+      "aliases": [
+        "كليوباترا",
+        "cleopatra",
+        "cleopatra hospital"
+      ],
+      "search_term": "مستشفى كليوباترا",
+      "international": false
+    },
+    {
+      "id": "as_salam_hospital",
+      "display_ar": "مستشفى السلام الدولي",
+      "display_en": "As-Salam International Hospital",
+      "category_id": "hospital",
+      "aliases": [
+        "السلام الدولي",
+        "مستشفى السلام الدولي",
+        "as-salam international",
+        "as salam international",
+        "assalam international"
+      ],
+      "search_term": "مستشفى السلام الدولي",
+      "international": false
+    },
+    {
+      "id": "dar_elfouad",
+      "display_ar": "دار الفؤاد",
+      "display_en": "Dar Al Fouad Hospital",
+      "category_id": "hospital",
+      "aliases": [
+        "دار الفؤاد",
+        "دار الفواد",
+        "dar al fouad",
+        "dar el fouad"
+      ],
+      "search_term": "دار الفؤاد",
+      "international": false
+    },
+    {
+      "id": "masary_exchange",
+      "display_ar": "مصاري للصرافة",
+      "display_en": "Masary Exchange",
+      "category_id": "exchange",
+      "aliases": [
+        "مصاري",
+        "masary"
+      ],
+      "search_term": "مصاري للصرافة",
+      "international": false
+    },
+    {
+      "id": "alahly_exchange",
+      "display_ar": "الأهلي للصرافة",
+      "display_en": "Al Ahly Exchange",
+      "category_id": "exchange",
+      "aliases": [
+        "الاهلي للصرافة",
+        "ahly exchange"
+      ],
+      "search_term": "الأهلي للصرافة",
+      "international": false
+    },
+    {
+      "id": "western_union_eg",
+      "display_ar": "ويسترن يونيون",
+      "display_en": "Western Union",
+      "category_id": "exchange",
+      "aliases": [
+        "ويسترن يونيون",
+        "western union"
+      ],
+      "search_term": "ويسترن يونيون",
+      "international": true
+    },
+    {
+      "id": "b_tech",
+      "display_ar": "بي تك",
+      "display_en": "B.TECH",
+      "category_id": "mobile_shop",
+      "aliases": [
+        "بي تك",
+        "بى تك",
+        "b tech",
+        "btech"
+      ],
+      "search_term": "بي تك",
+      "international": false
+    },
+    {
+      "id": "raneen",
+      "display_ar": "رنين",
+      "display_en": "Raneen",
+      "category_id": "mobile_shop",
+      "aliases": [
+        "رنين",
+        "raneen"
+      ],
+      "search_term": "رنين",
+      "international": false
+    },
+    {
+      "id": "diwan",
+      "display_ar": "ديوان",
+      "display_en": "Diwan Bookstores",
+      "category_id": "bookshop",
+      "aliases": [
+        "ديوان",
+        "مكتبة ديوان",
+        "diwan"
+      ],
+      "search_term": "ديوان",
+      "international": false
+    },
+    {
+      "id": "alef",
+      "display_ar": "ألف",
+      "display_en": "Alef Bookstores",
+      "category_id": "bookshop",
+      "aliases": [
+        "مكتبة الف",
+        "alef bookstores"
+      ],
+      "search_term": "مكتبة ألف",
+      "international": false
+    },
+    {
+      "id": "egypt_post",
+      "display_ar": "البريد المصري",
+      "display_en": "Egypt Post",
+      "category_id": "post_office",
+      "aliases": [
+        "البريد المصري",
+        "egypt post",
+        "مكتب البريد"
+      ],
+      "search_term": "البريد المصري",
+      "international": false
+    },
+    {
+      "id": "misr_petroleum",
+      "display_ar": "مصر للبترول",
+      "display_en": "Misr Petroleum",
+      "category_id": "gas_station",
+      "aliases": [
+        "مصر للبترول",
+        "misr petroleum",
+        "misr petrol",
+        "masr lel betrol"
+      ],
+      "search_term": "مصر للبترول",
+      "international": false
+    },
+    {
+      "id": "kheir_zaman",
+      "display_ar": "خير زمان",
+      "display_en": "Kheir Zaman",
+      "category_id": "supermarket",
+      "aliases": [
+        "خير زمان",
+        "kheir zaman",
+        "khair zaman"
+      ],
+      "search_term": "خير زمان",
+      "international": false
+    },
+    {
+      "id": "awlad_ragab",
+      "display_ar": "أولاد رجب",
+      "display_en": "Awlad Ragab",
+      "category_id": "supermarket",
+      "aliases": [
+        "اولاد رجب",
+        "أولاد رجب",
+        "awlad ragab",
+        "ragab sons"
+      ],
+      "search_term": "أولاد رجب",
+      "international": false
+    },
+    {
+      "id": "fathalla",
+      "display_ar": "فتح الله",
+      "display_en": "Fathalla Market",
+      "category_id": "supermarket",
+      "aliases": [
+        "فتح الله",
+        "fathalla",
+        "fathallah",
+        "فتح الله ماركت"
+      ],
+      "search_term": "فتح الله",
+      "international": false
+    },
+    {
+      "id": "zahran",
+      "display_ar": "زهران",
+      "display_en": "Zahran Market",
+      "category_id": "supermarket",
+      "aliases": [
+        "زهران",
+        "zahran",
+        "زهران ماركت"
+      ],
+      "search_term": "زهران",
+      "international": false
+    },
+    {
+      "id": "bim",
+      "display_ar": "بيم",
+      "display_en": "BIM",
+      "category_id": "supermarket",
+      "aliases": [
+        "بيم",
+        "bim",
+        "بيم ماركت"
+      ],
+      "search_term": "بيم",
+      "international": false
+    },
+    {
+      "id": "rushdy",
+      "display_ar": "صيدليات رشدي",
+      "display_en": "Rushdy Pharmacies",
+      "category_id": "pharmacy",
+      "aliases": [
+        "رشدي",
+        "رشدى",
+        "صيدليات رشدي",
+        "rushdy",
+        "roshdy"
+      ],
+      "search_term": "صيدليات رشدي",
+      "international": false
+    }
+  ],
+  "areas": [
+    {
+      "id": "zamalek",
+      "display_ar": "الزمالك",
+      "display_en": "Zamalek",
+      "lat": 30.0614,
+      "lng": 31.2197,
+      "radius_m": 1600.0,
+      "aliases": [
+        "زمالك",
+        "zamalek",
+        "el zamalek",
+        "gezira",
+        "الجزيرة"
+      ]
+    },
+    {
+      "id": "mohandessin",
+      "display_ar": "المهندسين",
+      "display_en": "Mohandessin",
+      "lat": 30.0561,
+      "lng": 31.2003,
+      "radius_m": 2000.0,
+      "aliases": [
+        "مهندسين",
+        "المهندسين الجيزة",
+        "mohandessin",
+        "mohandeseen",
+        "el mohandessin",
+        "mohandiseen"
+      ]
+    },
+    {
+      "id": "dokki",
+      "display_ar": "الدقي",
+      "display_en": "Dokki",
+      "lat": 30.0385,
+      "lng": 31.2118,
+      "radius_m": 1800.0,
+      "aliases": [
+        "دقي",
+        "dokki",
+        "doki",
+        "el dokki"
+      ]
+    },
+    {
+      "id": "agouza",
+      "display_ar": "العجوزة",
+      "display_en": "Agouza",
+      "lat": 30.056,
+      "lng": 31.21,
+      "radius_m": 1500.0,
+      "aliases": [
+        "عجوزة",
+        "agouza",
+        "agoza",
+        "el agouza"
+      ]
+    },
+    {
+      "id": "imbaba",
+      "display_ar": "إمبابة",
+      "display_en": "Imbaba",
+      "lat": 30.077,
+      "lng": 31.207,
+      "radius_m": 2500.0,
+      "aliases": [
+        "امبابة",
+        "imbaba",
+        "embaba"
+      ]
+    },
+    {
+      "id": "giza",
+      "display_ar": "الجيزة",
+      "display_en": "Giza",
+      "lat": 30.0131,
+      "lng": 31.2089,
+      "radius_m": 4000.0,
+      "aliases": [
+        "جيزة",
+        "giza",
+        "el giza",
+        "gizeh"
+      ]
+    },
+    {
+      "id": "haram",
+      "display_ar": "الهرم",
+      "display_en": "Haram",
+      "lat": 29.99,
+      "lng": 31.16,
+      "radius_m": 3000.0,
+      "aliases": [
+        "هرم",
+        "haram",
+        "el haram",
+        "شارع الهرم",
+        "pyramids street"
+      ],
+      "parent": "giza"
+    },
+    {
+      "id": "faisal",
+      "display_ar": "فيصل",
+      "display_en": "Faisal",
+      "lat": 29.988,
+      "lng": 31.178,
+      "radius_m": 3000.0,
+      "aliases": [
+        "شارع فيصل",
+        "faisal",
+        "faysal",
+        "شارع فيصل الجيزة"
+      ],
+      "parent": "giza"
+    },
+    {
+      "id": "hadayek_ahram",
+      "display_ar": "حدائق الأهرام",
+      "display_en": "Hadayek El Ahram",
+      "lat": 29.97,
+      "lng": 31.13,
+      "radius_m": 3000.0,
+      "aliases": [
+        "حدائق الاهرام",
+        "hadayek el ahram",
+        "hadaek el ahram"
+      ],
+      "parent": "giza"
+    },
+    {
+      "id": "boulaq_dakrour",
+      "display_ar": "بولاق الدكرور",
+      "display_en": "Boulaq El Dakrour",
+      "lat": 30.03,
+      "lng": 31.195,
+      "radius_m": 2000.0,
+      "aliases": [
+        "بولاق الدكرور",
+        "boulaq dakrour",
+        "bolak el dakrour"
+      ],
+      "parent": "giza"
+    },
+    {
+      "id": "downtown_cairo",
+      "display_ar": "وسط البلد",
+      "display_en": "Downtown Cairo",
+      "lat": 30.045,
+      "lng": 31.24,
+      "radius_m": 1800.0,
+      "aliases": [
+        "وسط البلد",
+        "داون تاون",
+        "downtown",
+        "wist el balad",
+        "west el balad",
+        "cairo downtown"
+      ]
+    },
+    {
+      "id": "garden_city",
+      "display_ar": "جاردن سيتي",
+      "display_en": "Garden City",
+      "lat": 30.038,
+      "lng": 31.232,
+      "radius_m": 1100.0,
+      "aliases": [
+        "جاردن سيتى",
+        "garden city"
+      ]
+    },
+    {
+      "id": "maadi",
+      "display_ar": "المعادي",
+      "display_en": "Maadi",
+      "lat": 29.9601,
+      "lng": 31.2569,
+      "radius_m": 3200.0,
+      "aliases": [
+        "معادي",
+        "maadi",
+        "el maadi",
+        "maady",
+        "m3ady",
+        "madi"
+      ]
+    },
+    {
+      "id": "degla",
+      "display_ar": "دجلة المعادي",
+      "display_en": "Degla Maadi",
+      "lat": 29.96,
+      "lng": 31.268,
+      "radius_m": 1300.0,
+      "aliases": [
+        "دجلة",
+        "degla",
+        "digla"
+      ],
+      "parent": "maadi"
+    },
+    {
+      "id": "zahraa_maadi",
+      "display_ar": "زهراء المعادي",
+      "display_en": "Zahraa El Maadi",
+      "lat": 29.96,
+      "lng": 31.31,
+      "radius_m": 2000.0,
+      "aliases": [
+        "زهراء المعادي",
+        "zahraa el maadi",
+        "zahraa maadi"
+      ],
+      "parent": "maadi"
+    },
+    {
+      "id": "manial",
+      "display_ar": "المنيل",
+      "display_en": "Manial",
+      "lat": 30.023,
+      "lng": 31.229,
+      "radius_m": 1400.0,
+      "aliases": [
+        "منيل",
+        "manial",
+        "el manial",
+        "manyal"
+      ]
+    },
+    {
+      "id": "sayeda_zeinab",
+      "display_ar": "السيدة زينب",
+      "display_en": "Sayeda Zeinab",
+      "lat": 30.029,
+      "lng": 31.24,
+      "radius_m": 1500.0,
+      "aliases": [
+        "سيدة زينب",
+        "sayeda zeinab",
+        "el sayeda zeinab"
+      ]
+    },
+    {
+      "id": "masr_qadima",
+      "display_ar": "مصر القديمة",
+      "display_en": "Old Cairo",
+      "lat": 30.006,
+      "lng": 31.23,
+      "radius_m": 2000.0,
+      "aliases": [
+        "مصر القديمة",
+        "old cairo",
+        "masr el adima",
+        "coptic cairo"
+      ]
+    },
+    {
+      "id": "abbasiya",
+      "display_ar": "العباسية",
+      "display_en": "Abbasiya",
+      "lat": 30.068,
+      "lng": 31.28,
+      "radius_m": 1800.0,
+      "aliases": [
+        "عباسية",
+        "abbasiya",
+        "abaseya",
+        "el abbasiya"
+      ]
+    },
+    {
+      "id": "shubra",
+      "display_ar": "شبرا",
+      "display_en": "Shubra",
+      "lat": 30.09,
+      "lng": 31.245,
+      "radius_m": 3000.0,
+      "aliases": [
+        "شبرا مصر",
+        "shubra",
+        "shoubra"
+      ]
+    },
+    {
+      "id": "heliopolis",
+      "display_ar": "مصر الجديدة",
+      "display_en": "Heliopolis",
+      "lat": 30.0876,
+      "lng": 31.3255,
+      "radius_m": 3200.0,
+      "aliases": [
+        "مصر الجديده",
+        "هليوبوليس",
+        "heliopolis",
+        "masr el gedida",
+        "masr gedida",
+        "korba",
+        "الكوربة"
+      ]
+    },
+    {
+      "id": "nasr_city",
+      "display_ar": "مدينة نصر",
+      "display_en": "Nasr City",
+      "lat": 30.0566,
+      "lng": 31.33,
+      "radius_m": 4000.0,
+      "aliases": [
+        "مدينه نصر",
+        "نصر سيتي",
+        "nasr city",
+        "madinet nasr",
+        "madinat nasr",
+        "nasrcity"
+      ]
+    },
+    {
+      "id": "ain_shams",
+      "display_ar": "عين شمس",
+      "display_en": "Ain Shams",
+      "lat": 30.13,
+      "lng": 31.32,
+      "radius_m": 2500.0,
+      "aliases": [
+        "عين شمس",
+        "ain shams",
+        "ein shams",
+        "3ein shams"
+      ]
+    },
+    {
+      "id": "nozha",
+      "display_ar": "النزهة",
+      "display_en": "Nozha",
+      "lat": 30.1,
+      "lng": 31.34,
+      "radius_m": 2000.0,
+      "aliases": [
+        "نزهة",
+        "nozha",
+        "el nozha"
+      ],
+      "parent": "heliopolis"
+    },
+    {
+      "id": "sheraton",
+      "display_ar": "شيراتون المطار",
+      "display_en": "Sheraton Heliopolis",
+      "lat": 30.108,
+      "lng": 31.366,
+      "radius_m": 1800.0,
+      "aliases": [
+        "شيراتون",
+        "sheraton",
+        "sheraton heliopolis"
+      ],
+      "parent": "heliopolis"
+    },
+    {
+      "id": "mokattam",
+      "display_ar": "المقطم",
+      "display_en": "Mokattam",
+      "lat": 30.01,
+      "lng": 31.3,
+      "radius_m": 2500.0,
+      "aliases": [
+        "مقطم",
+        "mokattam",
+        "mukattam",
+        "el mokattam"
+      ]
+    },
+    {
+      "id": "helwan",
+      "display_ar": "حلوان",
+      "display_en": "Helwan",
+      "lat": 29.84,
+      "lng": 31.334,
+      "radius_m": 4000.0,
+      "aliases": [
+        "حلوان",
+        "helwan",
+        "helouan"
+      ]
+    },
+    {
+      "id": "marg",
+      "display_ar": "المرج",
+      "display_en": "El Marg",
+      "lat": 30.17,
+      "lng": 31.34,
+      "radius_m": 2500.0,
+      "aliases": [
+        "مرج",
+        "el marg",
+        "marg"
+      ]
+    },
+    {
+      "id": "new_cairo",
+      "display_ar": "القاهرة الجديدة",
+      "display_en": "New Cairo",
+      "lat": 30.008,
+      "lng": 31.43,
+      "radius_m": 7000.0,
+      "aliases": [
+        "القاهره الجديده",
+        "new cairo",
+        "newcairo",
+        "قاهرة جديدة"
+      ]
+    },
+    {
+      "id": "tagamoa_khames",
+      "display_ar": "التجمع الخامس",
+      "display_en": "Fifth Settlement",
+      "lat": 30.025,
+      "lng": 31.44,
+      "radius_m": 4500.0,
+      "aliases": [
+        "التجمع",
+        "تجمع خامس",
+        "التجمع الخامس",
+        "tagamoa",
+        "tagamo3",
+        "el tagamoa",
+        "fifth settlement",
+        "5th settlement",
+        "tagamo3 khames"
+      ],
+      "parent": "new_cairo"
+    },
+    {
+      "id": "tagamoa_awal",
+      "display_ar": "التجمع الأول",
+      "display_en": "First Settlement",
+      "lat": 30.033,
+      "lng": 31.405,
+      "radius_m": 2500.0,
+      "aliases": [
+        "التجمع الاول",
+        "first settlement",
+        "tagamoa awal"
+      ],
+      "parent": "new_cairo"
+    },
+    {
+      "id": "katameya",
+      "display_ar": "القطامية",
+      "display_en": "Katameya",
+      "lat": 29.97,
+      "lng": 31.41,
+      "radius_m": 3500.0,
+      "aliases": [
+        "قطامية",
+        "katameya",
+        "kattameya",
+        "el katameya"
+      ],
+      "parent": "new_cairo"
+    },
+    {
+      "id": "rehab",
+      "display_ar": "الرحاب",
+      "display_en": "El Rehab",
+      "lat": 30.06,
+      "lng": 31.49,
+      "radius_m": 3000.0,
+      "aliases": [
+        "رحاب",
+        "el rehab",
+        "rehab city",
+        "الرحاب سيتي"
+      ]
+    },
+    {
+      "id": "madinaty",
+      "display_ar": "مدينتي",
+      "display_en": "Madinaty",
+      "lat": 30.103,
+      "lng": 31.63,
+      "radius_m": 4000.0,
+      "aliases": [
+        "مدينتى",
+        "madinaty",
+        "madinati"
+      ]
+    },
+    {
+      "id": "shorouk",
+      "display_ar": "الشروق",
+      "display_en": "El Shorouk",
+      "lat": 30.125,
+      "lng": 31.62,
+      "radius_m": 3500.0,
+      "aliases": [
+        "شروق",
+        "el shorouk",
+        "shorouk city"
+      ]
+    },
+    {
+      "id": "obour",
+      "display_ar": "العبور",
+      "display_en": "Obour City",
+      "lat": 30.227,
+      "lng": 31.47,
+      "radius_m": 3500.0,
+      "aliases": [
+        "عبور",
+        "el obour",
+        "obour"
+      ]
+    },
+    {
+      "id": "badr",
+      "display_ar": "مدينة بدر",
+      "display_en": "Badr City",
+      "lat": 30.135,
+      "lng": 31.72,
+      "radius_m": 4000.0,
+      "aliases": [
+        "بدر",
+        "badr city",
+        "madinet badr"
+      ]
+    },
+    {
+      "id": "october",
+      "display_ar": "مدينة 6 أكتوبر",
+      "display_en": "6th of October City",
+      "lat": 29.9285,
+      "lng": 30.9188,
+      "radius_m": 8000.0,
+      "aliases": [
+        "6 اكتوبر",
+        "ستة اكتوبر",
+        "السادس من اكتوبر",
+        "اكتوبر",
+        "أكتوبر",
+        "6 october",
+        "6th october",
+        "6th of october",
+        "october city",
+        "october",
+        "sixth of october"
+      ]
+    },
+    {
+      "id": "sheikh_zayed",
+      "display_ar": "الشيخ زايد",
+      "display_en": "Sheikh Zayed City",
+      "lat": 30.025,
+      "lng": 30.97,
+      "radius_m": 5000.0,
+      "aliases": [
+        "شيخ زايد",
+        "زايد",
+        "sheikh zayed",
+        "zayed",
+        "el sheikh zayed",
+        "shaikh zayed"
+      ]
+    },
+    {
+      "id": "smart_village",
+      "display_ar": "القرية الذكية",
+      "display_en": "Smart Village",
+      "lat": 30.072,
+      "lng": 31.017,
+      "radius_m": 2000.0,
+      "aliases": [
+        "القرية الذكية",
+        "smart village",
+        "smart village cairo"
+      ]
+    },
+    {
+      "id": "new_capital",
+      "display_ar": "العاصمة الإدارية",
+      "display_en": "New Administrative Capital",
+      "lat": 30.013,
+      "lng": 31.74,
+      "radius_m": 9000.0,
+      "aliases": [
+        "العاصمة الادارية",
+        "العاصمة",
+        "new capital",
+        "administrative capital",
+        "el asema el edareya"
+      ]
+    },
+    {
+      "id": "sharm_el_sheikh",
+      "display_ar": "شرم الشيخ",
+      "display_en": "Sharm El Sheikh",
+      "lat": 27.9158,
+      "lng": 34.33,
+      "radius_m": 12000.0,
+      "aliases": [
+        "شرم",
+        "sharm",
+        "sharm el sheikh",
+        "sharm el-sheikh",
+        "sharm elsheikh"
+      ]
+    },
+    {
+      "id": "hurghada",
+      "display_ar": "الغردقة",
+      "display_en": "Hurghada",
+      "lat": 27.2579,
+      "lng": 33.8116,
+      "radius_m": 12000.0,
+      "aliases": [
+        "الغردقه",
+        "hurghada",
+        "ghardaqa",
+        "el ghardaqa"
+      ]
+    },
+    {
+      "id": "dahab",
+      "display_ar": "دهب",
+      "display_en": "Dahab",
+      "lat": 28.5,
+      "lng": 34.513,
+      "radius_m": 6000.0,
+      "aliases": [
+        "dahab"
+      ]
+    },
+    {
+      "id": "marsa_alam",
+      "display_ar": "مرسى علم",
+      "display_en": "Marsa Alam",
+      "lat": 25.0676,
+      "lng": 34.879,
+      "radius_m": 8000.0,
+      "aliases": [
+        "مرسي علم",
+        "marsa alam"
+      ]
+    },
+    {
+      "id": "el_gouna",
+      "display_ar": "الجونة",
+      "display_en": "El Gouna",
+      "lat": 27.3942,
+      "lng": 33.6782,
+      "radius_m": 5000.0,
+      "aliases": [
+        "الجونه",
+        "el gouna",
+        "gouna"
+      ]
+    },
+    {
+      "id": "ain_sokhna",
+      "display_ar": "العين السخنة",
+      "display_en": "Ain Sokhna",
+      "lat": 29.6,
+      "lng": 32.3167,
+      "radius_m": 12000.0,
+      "aliases": [
+        "العين السخنه",
+        "السخنة",
+        "السخنه",
+        "ain sokhna",
+        "el sokhna",
+        "sokhna"
+      ]
+    },
+    {
+      "id": "siwa",
+      "display_ar": "سيوة",
+      "display_en": "Siwa",
+      "lat": 29.2032,
+      "lng": 25.5195,
+      "radius_m": 15000.0,
+      "aliases": [
+        "سيوه",
+        "واحة سيوة",
+        "siwa",
+        "siwa oasis"
+      ]
+    },
+    {
+      "id": "luxor_city",
+      "display_ar": "الأقصر",
+      "display_en": "Luxor",
+      "lat": 25.6872,
+      "lng": 32.6396,
+      "radius_m": 10000.0,
+      "aliases": [
+        "الاقصر",
+        "luxor",
+        "el o2sor"
+      ]
+    },
+    {
+      "id": "aswan_city",
+      "display_ar": "أسوان",
+      "display_en": "Aswan",
+      "lat": 24.0889,
+      "lng": 32.8998,
+      "radius_m": 10000.0,
+      "aliases": [
+        "اسوان",
+        "aswan"
+      ]
+    },
+    {
+      "id": "port_tawfik",
+      "display_ar": "بور توفيق",
+      "display_en": "Port Tawfik",
+      "lat": 29.9381,
+      "lng": 32.564,
+      "radius_m": 2000.0,
+      "aliases": [
+        "بورتوفيق",
+        "port tawfik",
+        "port tewfik"
+      ]
+    },
+    {
+      "id": "alamein",
+      "display_ar": "العلمين",
+      "display_en": "El Alamein",
+      "lat": 30.83,
+      "lng": 28.955,
+      "radius_m": 15000.0,
+      "aliases": [
+        "العلمين الجديدة",
+        "el alamein",
+        "alamein",
+        "new alamein"
+      ]
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "tahrir_square",
+      "display_ar": "ميدان التحرير",
+      "display_en": "Tahrir Square",
+      "lat": 30.0444,
+      "lng": 31.2357,
+      "aliases": [
+        "التحرير",
+        "ميدان التحرير",
+        "tahrir",
+        "tahrir square"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "ramses_square",
+      "display_ar": "ميدان رمسيس",
+      "display_en": "Ramses Square",
+      "lat": 30.063,
+      "lng": 31.247,
+      "aliases": [
+        "رمسيس",
+        "ميدان رمسيس",
+        "محطة مصر",
+        "ramses",
+        "ramsis",
+        "ramses square",
+        "misr station"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "ataba",
+      "display_ar": "العتبة",
+      "display_en": "Ataba",
+      "lat": 30.052,
+      "lng": 31.247,
+      "aliases": [
+        "عتبة",
+        "ataba",
+        "el ataba"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_university",
+      "display_ar": "جامعة القاهرة",
+      "display_en": "Cairo University",
+      "lat": 30.026,
+      "lng": 31.209,
+      "aliases": [
+        "الجامعة",
+        "جامعة القاهرة",
+        "cairo university",
+        "gam3et el qahera",
+        "el gam3a"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "university_bridge",
+      "display_ar": "كوبري الجامعة",
+      "display_en": "University Bridge",
+      "lat": 30.029,
+      "lng": 31.22,
+      "aliases": [
+        "كوبري الجامعة",
+        "كوبرى الجامعه",
+        "university bridge",
+        "kobri el gam3a",
+        "kobry el gamaa"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "sixth_october_bridge",
+      "display_ar": "كوبري 6 أكتوبر",
+      "display_en": "6th October Bridge",
+      "lat": 30.053,
+      "lng": 31.236,
+      "aliases": [
+        "كوبري 6 اكتوبر",
+        "كوبري اكتوبر",
+        "6 october bridge",
+        "kobri 6 october"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "city_stars",
+      "display_ar": "سيتي ستارز",
+      "display_en": "City Stars",
+      "lat": 30.073,
+      "lng": 31.345,
+      "aliases": [
+        "سيتي ستارز",
+        "سيتى ستارز",
+        "ستارز",
+        "city stars",
+        "citystars"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "triumph",
+      "display_ar": "ميدان تريومف",
+      "display_en": "Triumph Square",
+      "lat": 30.089,
+      "lng": 31.328,
+      "aliases": [
+        "تريومف",
+        "ترايومف",
+        "triumph",
+        "triumph square"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "hosary",
+      "display_ar": "مسجد الحصري",
+      "display_en": "El Hosary Mosque",
+      "lat": 29.972,
+      "lng": 30.949,
+      "aliases": [
+        "الحصري",
+        "الحصرى",
+        "ميدان الحصري",
+        "hosary",
+        "el hosary"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "lebanon_square",
+      "display_ar": "ميدان لبنان",
+      "display_en": "Lebanon Square",
+      "lat": 30.057,
+      "lng": 31.2,
+      "aliases": [
+        "لبنان",
+        "ميدان لبنان",
+        "lebanon",
+        "lebanon square"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "bohouth",
+      "display_ar": "محطة البحوث",
+      "display_en": "El Bohouth",
+      "lat": 30.036,
+      "lng": 31.201,
+      "aliases": [
+        "البحوث",
+        "محطة البحوث",
+        "bohouth",
+        "el bohouth",
+        "dokki metro"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "remaya_square",
+      "display_ar": "ميدان الرماية",
+      "display_en": "Remaya Square",
+      "lat": 29.988,
+      "lng": 31.14,
+      "aliases": [
+        "الرماية",
+        "ميدان الرماية",
+        "remaya",
+        "el remaya"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "mall_of_arabia",
+      "display_ar": "مول العرب",
+      "display_en": "Mall of Arabia",
+      "lat": 29.98,
+      "lng": 30.92,
+      "aliases": [
+        "مول العرب",
+        "مول العرب اكتوبر",
+        "mall of arabia"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_festival_city",
+      "display_ar": "كايرو فيستيفال سيتي",
+      "display_en": "Cairo Festival City",
+      "lat": 30.029,
+      "lng": 31.409,
+      "aliases": [
+        "فيستيفال سيتي",
+        "كايرو فيستيفال",
+        "festival city",
+        "cfc",
+        "cairo festival city"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "pyramids",
+      "display_ar": "الأهرامات",
+      "display_en": "Pyramids of Giza",
+      "lat": 29.9792,
+      "lng": 31.1342,
+      "aliases": [
+        "الاهرامات",
+        "اهرامات الجيزة",
+        "الهرم الاكبر",
+        "pyramids",
+        "giza pyramids"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_tower",
+      "display_ar": "برج القاهرة",
+      "display_en": "Cairo Tower",
+      "lat": 30.0459,
+      "lng": 31.2243,
+      "aliases": [
+        "برج القاهرة",
+        "cairo tower"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "khan_el_khalili",
+      "display_ar": "خان الخليلي",
+      "display_en": "Khan El Khalili",
+      "lat": 30.0477,
+      "lng": 31.2622,
+      "aliases": [
+        "خان الخليلي",
+        "الحسين",
+        "khan el khalili",
+        "khan el khalily"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "citadel",
+      "display_ar": "قلعة صلاح الدين",
+      "display_en": "Salah El Din Citadel",
+      "lat": 30.0287,
+      "lng": 31.2599,
+      "aliases": [
+        "القلعة",
+        "قلعة صلاح الدين",
+        "citadel",
+        "2al3et salah el din",
+        "2al3a",
+        "el 2al3a",
+        "al 2al3a"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_opera_house",
+      "display_ar": "دار الأوبرا المصرية",
+      "display_en": "Cairo Opera House",
+      "lat": 30.0425,
+      "lng": 31.2243,
+      "aliases": [
+        "دار الاوبرا",
+        "دار الأوبرا",
+        "الاوبرا",
+        "الأوبرا",
+        "cairo opera house",
+        "opera house",
+        "el opera"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_stadium",
+      "display_ar": "استاد القاهرة",
+      "display_en": "Cairo Stadium",
+      "lat": 30.068,
+      "lng": 31.312,
+      "aliases": [
+        "الاستاد",
+        "استاد القاهرة",
+        "cairo stadium",
+        "estad"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_airport",
+      "display_ar": "مطار القاهرة",
+      "display_en": "Cairo International Airport",
+      "lat": 30.1219,
+      "lng": 31.4056,
+      "aliases": [
+        "المطار",
+        "مطار القاهرة الدولي",
+        "cairo airport",
+        "matar el qahera"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "sphinx_airport",
+      "display_ar": "مطار سفنكس",
+      "display_en": "Sphinx Airport",
+      "lat": 30.115,
+      "lng": 30.894,
+      "aliases": [
+        "مطار سفنكس",
+        "sphinx airport"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "auc_new_cairo",
+      "display_ar": "الجامعة الأمريكية",
+      "display_en": "AUC New Cairo",
+      "lat": 30.019,
+      "lng": 31.499,
+      "aliases": [
+        "الجامعة الامريكية",
+        "auc",
+        "american university"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "ain_shams_university",
+      "display_ar": "جامعة عين شمس",
+      "display_en": "Ain Shams University",
+      "lat": 30.078,
+      "lng": 31.283,
+      "aliases": [
+        "جامعة عين شمس",
+        "ain shams university"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "grand_egyptian_museum",
+      "display_ar": "المتحف المصري الكبير",
+      "display_en": "Grand Egyptian Museum",
+      "lat": 29.9938,
+      "lng": 31.1194,
+      "aliases": [
+        "المتحف الكبير",
+        "المتحف المصري الكبير",
+        "grand egyptian museum",
+        "gem"
+      ],
+      "is_road": false,
+      "search_radius_m": 2500.0
+    }
+  ],
+  "roads": [
+    {
+      "id": "ring_road",
+      "display_ar": "الطريق الدائري",
+      "display_en": "Ring Road",
+      "lat": 30.05,
+      "lng": 31.25,
+      "aliases": [
+        "الدايري",
+        "الدائري",
+        "الطريق الدائرى",
+        "دايري",
+        "ring road",
+        "el dayri",
+        "el da2ery",
+        "circular road"
+      ],
+      "is_road": true,
+      "search_radius_m": 3000.0
+    },
+    {
+      "id": "regional_ring_road",
+      "display_ar": "الدائري الإقليمي",
+      "display_en": "Regional Ring Road",
+      "lat": 30.15,
+      "lng": 31.4,
+      "aliases": [
+        "الاقليمي",
+        "الدائري الاقليمي",
+        "regional ring road"
+      ],
+      "is_road": true,
+      "search_radius_m": 5000.0
+    },
+    {
+      "id": "mehwar",
+      "display_ar": "محور 26 يوليو",
+      "display_en": "26th July Corridor",
+      "lat": 30.04,
+      "lng": 31.05,
+      "aliases": [
+        "المحور",
+        "محور 26 يوليو",
+        "محور ستة وعشرين يوليو",
+        "mehwar",
+        "el mehwar",
+        "26 july corridor",
+        "mehwar 26 july"
+      ],
+      "is_road": true,
+      "search_radius_m": 3000.0
+    },
+    {
+      "id": "salah_salem",
+      "display_ar": "صلاح سالم",
+      "display_en": "Salah Salem",
+      "lat": 30.06,
+      "lng": 31.29,
+      "aliases": [
+        "صلاح سالم",
+        "شارع صلاح سالم",
+        "salah salem",
+        "salah salm"
+      ],
+      "is_road": true,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "ninety_street",
+      "display_ar": "شارع التسعين",
+      "display_en": "90th Street",
+      "lat": 30.008,
+      "lng": 31.427,
+      "aliases": [
+        "التسعين",
+        "شارع التسعين",
+        "90 street",
+        "90th street",
+        "tes3een",
+        "el tes3een",
+        "شارع 90"
+      ],
+      "is_road": true,
+      "search_radius_m": 3000.0
+    },
+    {
+      "id": "autostrad",
+      "display_ar": "الأوتوستراد",
+      "display_en": "Autostrad",
+      "lat": 30.01,
+      "lng": 31.31,
+      "aliases": [
+        "اوتوستراد",
+        "الاوتستراد",
+        "autostrad",
+        "autostrade"
+      ],
+      "is_road": true,
+      "search_radius_m": 3000.0
+    },
+    {
+      "id": "corniche",
+      "display_ar": "كورنيش النيل",
+      "display_en": "Nile Corniche",
+      "lat": 30.04,
+      "lng": 31.23,
+      "aliases": [
+        "الكورنيش",
+        "كورنيش",
+        "corniche",
+        "el corniche",
+        "nile corniche"
+      ],
+      "is_road": true,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "nasr_road",
+      "display_ar": "طريق النصر",
+      "display_en": "Nasr Road",
+      "lat": 30.07,
+      "lng": 31.33,
+      "aliases": [
+        "طريق النصر",
+        "nasr road",
+        "tare2 el nasr"
+      ],
+      "is_road": true,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "suez_road",
+      "display_ar": "طريق السويس",
+      "display_en": "Suez Road",
+      "lat": 30.12,
+      "lng": 31.55,
+      "aliases": [
+        "طريق السويس",
+        "suez road",
+        "tare2 el suez"
+      ],
+      "is_road": true,
+      "search_radius_m": 5000.0
+    },
+    {
+      "id": "ismailia_road",
+      "display_ar": "طريق مصر إسماعيلية",
+      "display_en": "Cairo-Ismailia Road",
+      "lat": 30.17,
+      "lng": 31.5,
+      "aliases": [
+        "طريق اسماعيلية",
+        "مصر اسماعيلية",
+        "ismailia road",
+        "ismailia desert road"
+      ],
+      "is_road": true,
+      "search_radius_m": 5000.0
+    },
+    {
+      "id": "mariouteya",
+      "display_ar": "المريوطية",
+      "display_en": "Mariouteya",
+      "lat": 29.985,
+      "lng": 31.175,
+      "aliases": [
+        "المريوطية",
+        "مريوطية",
+        "mariouteya",
+        "maryoteya"
+      ],
+      "is_road": true,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "cairo_alex_desert",
+      "display_ar": "طريق مصر إسكندرية الصحراوي",
+      "display_en": "Cairo-Alexandria Desert Road",
+      "lat": 30.1,
+      "lng": 30.9,
+      "aliases": [
+        "الصحراوي",
+        "طريق اسكندرية الصحراوي",
+        "desert road",
+        "cairo alex desert road"
+      ],
+      "is_road": true,
+      "search_radius_m": 6000.0
+    },
+    {
+      "id": "haram_street",
+      "display_ar": "شارع الهرم",
+      "display_en": "Al Haram Street",
+      "lat": 29.993,
+      "lng": 31.17,
+      "aliases": [
+        "شارع الهرم",
+        "شارع الاهرام",
+        "شارع الأهرام",
+        "haram street",
+        "el haram street",
+        "share3 el haram",
+        "pyramids road"
+      ],
+      "is_road": true,
+      "search_radius_m": 4000.0
+    },
+    {
+      "id": "faisal_street",
+      "display_ar": "شارع فيصل",
+      "display_en": "Faisal Street",
+      "lat": 29.9975,
+      "lng": 31.16,
+      "aliases": [
+        "شارع فيصل",
+        "شارع الملك فيصل",
+        "فيصل",
+        "faisal street",
+        "king faisal street",
+        "share3 faisal"
+      ],
+      "is_road": true,
+      "search_radius_m": 4000.0
+    },
+    {
+      "id": "arab_league_street",
+      "display_ar": "شارع جامعة الدول العربية",
+      "display_en": "Arab League Street",
+      "lat": 30.0546,
+      "lng": 31.2035,
+      "aliases": [
+        "جامعة الدول",
+        "شارع جامعة الدول",
+        "شارع جامعة الدول العربية",
+        "gameat el dewal",
+        "arab league street",
+        "share3 gam3et el dewal"
+      ],
+      "is_road": true,
+      "search_radius_m": 2500.0
+    },
+    {
+      "id": "fouad_street",
+      "display_ar": "شارع فؤاد",
+      "display_en": "Fouad Street",
+      "lat": 31.198,
+      "lng": 29.905,
+      "aliases": [
+        "شارع فؤاد",
+        "طريق الحرية",
+        "شارع الحرية",
+        "fouad street",
+        "horreya road",
+        "tare2 el horreya"
+      ],
+      "is_road": true,
+      "search_radius_m": 2500.0
+    }
+  ],
+  "prepositions": {
+    "near_landmark": [
+      "جنب",
+      "بجوار",
+      "جمب",
+      "قريب من",
+      "قريب",
+      "حوالين",
+      "حوالي",
+      "عند",
+      "في منطقة",
+      "ناحية",
+      "تحت",
+      "فوق",
+      "قدام",
+      "أمام",
+      "امام",
+      "ورا",
+      "خلف",
+      "وراء",
+      "على",
+      "بجانب",
+      "near",
+      "next to",
+      "beside",
+      "by",
+      "around",
+      "close to",
+      "under",
+      "in front of",
+      "behind",
+      "at"
+    ],
+    "in_area": [
+      "في",
+      "فى",
+      "ب",
+      "بمنطقة",
+      "منطقة",
+      "حي",
+      "in",
+      "at",
+      "around"
+    ],
+    "near_me": [
+      "قريب مني",
+      "جنبي",
+      "حواليا",
+      "حوالين مني",
+      "اقرب",
+      "أقرب",
+      "قريب",
+      "near me",
+      "nearby",
+      "closest",
+      "nearest",
+      "close by",
+      "around me"
+    ],
+    "along_route": [
+      "على الطريق",
+      "في الطريق",
+      "على السكة",
+      "ع الطريق",
+      "في طريقي",
+      "في السكة",
+      "ع السكة",
+      "في سكتي",
+      "على سكتي",
+      "على طريقي",
+      "ع طريقي",
+      "along the way",
+      "on my route",
+      "on the way",
+      "en route"
+    ],
+    "near_destination": [
+      "جنب الوصول",
+      "عند الوصول",
+      "قريب من الوجهة",
+      "في اخر الطريق",
+      "near my destination",
+      "at the destination",
+      "near the end"
+    ]
+  }
+}

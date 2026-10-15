@@ -32,7 +32,7 @@ Stream lines (one JSON object per line):
 
 The ACTION PROTOCOL (server resolves data, client executes):
   Tools that need server data (POI lookup, geocoding) are resolved HERE with
-  the same Google/corridor machinery the Add-Stop feature uses (api/places.py),
+  the same place-index/corridor machinery the Add-Stop feature uses (api/places.py),
   then emitted as an `action` whose payload the client can render directly
   (pins, preview reroute, camera). Mutating actions carry requires_confirm=true
   and the client MUST get an explicit user confirmation (voice or button)
@@ -71,8 +71,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from api.places import (resolve_nearby, _google_corridor_pois, _filter_to_corridor,
-                        corridor_anchors, _mapbox_duration,
-                        search_places, place_details_rich)
+                        _mapbox_duration, search_places, place_details_rich)
 from services import route_geometry as geo
 
 logger = logging.getLogger("routemind.copilot")
@@ -129,8 +128,9 @@ _TOOLS: List[Dict] = [
           "arcade, a hangout spot, «أقرب جامع», «مكان نخرج فيه», etc.) and for "
           "recommendation/comparison asks ('best sushi near me', 'a quiet "
           "cafe', 'a hidden gem', 'which is highest rated'). Returns each "
-          "place's rating, review count, price and open-now so you can compare "
-          "and recommend. Pass `query` as the user's own words.",
+          "place's name, category and distance — open map data: there are NO "
+          "ratings, reviews, prices or open-now, so never claim any. Pass "
+          "`query` as the user's own words.",
           {"query": {"type": "string",
                      "description": "The place description in the user's words "
                      "('sushi', 'quiet cafe', 'hangout spot', 'أقرب جامع')."},
@@ -143,13 +143,16 @@ _TOOLS: List[Dict] = [
                      "description": "How many to return: 1 for 'the nearest/"
                      "best one', ~5 for options/compare, up to ~10 for 'all the "
                      "good ones'. Default 5."},
-           "open_now": {"type": "boolean"},
+           "open_now": {"type": "boolean",
+                        "description": "Not filterable — the place data has no "
+                        "open-now state."},
            "min_rating": {"type": "number",
-                          "description": "e.g. 4.5 for 'highly rated'."},
+                          "description": "Not filterable — the place data has "
+                          "no ratings."},
            "rank": {"type": "string", "enum": _RANK,
-                    "description": "best = quality (rating×reviews); closest = "
-                    "distance; popular = most-reviewed/famous; hidden_gem = "
-                    "great rating but under-the-radar."},
+                    "description": "closest = distance; best / popular / "
+                    "hidden_gem keep the search's own relevance order (no "
+                    "ratings or reviews exist to rank by)."},
            "display": {"type": "string", "enum": ["cards", "pins"],
                        "description": "cards = the user wants to BROWSE a "
                        "concrete list of a specific type and maybe pick one "
@@ -161,10 +164,11 @@ _TOOLS: List[Dict] = [
           ["query", "where"]),
     _tool("place_details",
           "Fetch deeper info for ONE specific place the user is asking about — "
-          "its REVIEWS (what people say), opening hours, phone, editorial blurb. "
-          "Use when they ask 'is it good / what do people say / reviews / when "
-          "does it close / phone number' about a named place or one you just "
-          "showed. Costs more, so only for a single drilled-into place. Pass "
+          "its listed phone, website and opening hours, when the open map data "
+          "has them (often it doesn't). There are NO reviews or ratings: asked "
+          "'is it good / what do people say', say there are no reviews to go "
+          "by. Use for 'when does it close / phone number' about a named place "
+          "or one you just showed. Only for a single drilled-into place. Pass "
           "place_id when the place came from an earlier find_places result "
           "(its id field) — much faster than re-searching by name.",
           {"place_name": {"type": "string"},
@@ -664,10 +668,10 @@ async def _find_places(ctx: Dict[str, Any], query: str, where: str = "near_me",
                        count: int = 5, open_now: bool = False,
                        min_rating: Optional[float] = None,
                        rank: str = "best") -> List[dict]:
-    """The copilot's unified place-retrieval brain. Resolves an optional Google
+    """The copilot's unified place-retrieval brain. Resolves an optional place
     type from the natural-language query, picks the bias point / route corridor
-    from the spatial intent, runs ONE enriched Text Search, annotates detour
-    minutes for along-route, and ranks per the requested lens."""
+    from the spatial intent, runs ONE search of the own place index, annotates
+    detour minutes for along-route, and ranks per the requested lens."""
     q = (query or "").strip()
     if not q:
         return []
@@ -675,8 +679,8 @@ async def _find_places(ctx: Dict[str, Any], query: str, where: str = "near_me",
     if lat is None or lng is None:
         return []
     included = _resolve_place_type(q)
-    # Google Text Search ranks along-route/relevance itself; use DISTANCE only
-    # for an explicit "closest" ask so the corridor/quality order is preserved.
+    # The index search ranks along-route/relevance itself; use DISTANCE only
+    # for an explicit "closest" ask so the corridor/relevance order is preserved.
     api_rank = "distance" if rank == "closest" else "relevance"
     fetch = max(count, 10)          # over-fetch so ranking has candidates to sort
     poly = None
@@ -725,8 +729,7 @@ async def _resolve_pois(ctx: Dict[str, Any], category: str,
             remaining = geo.remaining_route(pts, (lat, lng)) if lat and lng else pts
             if len(remaining) >= 2:
                 cum = geo.cumulative_distances(remaining)
-                anchors = corridor_anchors(remaining, cum)  # gapless near + sparse far
-                raw = await _google_corridor_pois(gtype, anchors)
+                raw = await _google_corridor_pois(gtype, remaining)  # own index, route = remaining
                 pois = _filter_to_corridor(raw, remaining, cum, category, limit)
                 if pois:
                     return [p.dict() for p in pois]
@@ -754,8 +757,8 @@ async def _resolve_pois(ctx: Dict[str, Any], category: str,
 async def _resolve_places(ctx: Dict[str, Any], query: str,
                           included_type: Optional[str] = None,
                           limit: int = 3) -> List[Dict]:
-    """Free-text place resolve near the user (Google text search). When
-    included_type is given the search is CONSTRAINED to that Google place type
+    """Free-text place resolve near the user (own place index). When
+    included_type is given the search is CONSTRAINED to that place type
     — 'Master' with gas_station can only match fuel stations, so a random shop
     whose name merely contains the word can't win."""
     lat = ctx.get("user_lat"); lng = ctx.get("user_lng")
@@ -883,10 +886,11 @@ async def _execute_tool(name: str, args: Dict[str, Any],
                     "note": "Shown on the map"
                             + (" as browsable cards the user can tap to add"
                                if display == "cards" else "")
-                            + ". Answer/compare with what's given; recommend one "
-                            "when a clear winner exists. Ratings are included "
-                            "only where they matter — if absent, do NOT mention "
-                            "ratings at all. This is INFORMATION — do not ask "
+                            + ". Answer/compare with what's given (names, "
+                            "distance, detour); recommend one when a clear "
+                            "winner exists. The place data has no ratings, "
+                            "reviews, prices or open-now — never mention or "
+                            "invent them. This is INFORMATION — do not ask "
                             "to add a stop unless the user asks to go there."}, action
 
         if name == "place_details":
@@ -914,9 +918,10 @@ async def _execute_tool(name: str, args: Dict[str, Any],
                     "price": det.get("price"), "open_now": det.get("open_now"),
                     "hours": det.get("hours"), "editorial": det.get("editorial"),
                     "review_samples": det.get("review_samples"),
-                    "note": "Summarize helpfully; if a review captures it well, "
-                            "paraphrase ONE briefly. Don't read raw star counts "
-                            "robotically."}, action
+                    "note": "Give what's listed (hours, phone) briefly. The "
+                            "place data has no reviews or ratings — if asked "
+                            "whether it's good, say there are no reviews to go "
+                            "by; never invent an opinion or an open state."}, action
 
         if name == "add_stop":
             cat = None

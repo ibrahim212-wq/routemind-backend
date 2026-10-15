@@ -15,7 +15,7 @@ on the phone, on Android Auto and on CarPlay alike, and cost nothing but the too
                   own UTC offset (Egypt's summer time included). Pure astronomy, no network: «المغرب امتى؟»,
                   "will I make Friday prayer?", iftar in Ramadan.
   eta_to          "How long to Maadi from here?" without touching the trip — the place resolved near the car
-                  (Google, as the other place tools) and Mapbox driving-traffic from where the car is now.
+                  (RouteMind's own place index, as the other place tools) and Mapbox driving-traffic from where the car is now.
 
 Everything numeric here is rounded for the ear by the model (the prompt's SPOKEN NUMBERS rule); results carry
 minutes and clock times, never decimals the TTS would mangle.

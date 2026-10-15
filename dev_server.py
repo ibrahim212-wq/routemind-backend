@@ -13,8 +13,9 @@ Run:
     uvicorn dev_server:app --host 0.0.0.0 --port 8080
 
 Env (export before running — same vars main.py uses):
-    GOOGLE_MAPS_API_KEY=...
     MAPBOX_TOKEN=...
+    PLACES_MANIFEST_URL=...   (optional — the place index manifest; default: the GitHub release)
+    PLACE_INDEX_DIR=...       (optional — the index cache, default /tmp/routemind-places)
 """
 
 import logging
@@ -25,7 +26,7 @@ from api.places import router as places_router
 
 # main.py calls this at import time; dev_server.py never imports main.py (by
 # design), so without this our logger.info/.debug/.warning calls in api/places.py
-# (including the [GOOGLE DEBUG] / [MOJIBAKE DEBUG] diagnostics) would mostly be
+# (including the place-index diagnostics) would mostly be
 # silently dropped — Python's root logger defaults to WARNING with no handler.
 logging.basicConfig(level=logging.INFO)
 

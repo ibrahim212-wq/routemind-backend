@@ -3,9 +3,10 @@ services/overpass.py
 
 Minimal, isolated OpenStreetMap Overpass fallback for the along-route POI search.
 
-This is NOT the primary source — api/places.py uses Google Places first. Overpass
-is queried ONLY when Google returns zero results (or errors) for a category, so
-the user still gets something in areas where Google's Egypt POI coverage is thin.
+This is NOT the primary source — api/places.py uses RouteMind's own place index
+(services/place_index.py) first. Overpass is queried ONLY when the index has
+nothing for a corridor (e.g. before the index is published or reachable), so
+the user still gets something.
 
 Kept deliberately small: one bbox query per category, a short retry, and a tiny
 in-memory TTL cache keyed by (category, rounded bbox). No new dependency — async

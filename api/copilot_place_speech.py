@@ -80,13 +80,13 @@ def _generic(s: str) -> bool:
 _PLACEHOLDER = {"en": "that place", "ar": "المكان ده"}
 
 PLACE_SPEECH_RULE = (
-    "SPEAKING PLACES: never say a place's name, rating, reviews, price, opening hours, phone or address — they "
-    "come from Google and are shown on the screen, never spoken. Say how many you found and refer to them by "
+    "SPEAKING PLACES: never say a place's name, opening hours, phone or address — they are shown on the "
+    "screen, never spoken (and there are no ratings, reviews or prices). Say how many you found and refer to them by "
     "order and distance (\"the first one, 2 km ahead\"); for details, say they're on the screen. You may still "
     "pass a place's name or id to a tool. A yes/no about a place asks about \"the place shown on the screen\"; "
     "if what you found may not be what they asked for, say so and ask them to check the screen first.")
 
-_NOTE = (" Descriptive place content (ratings, reviews, hours, phone, address) is on the screen and is never "
+_NOTE = (" Descriptive place content (hours, phone, address) is on the screen and is never "
          "spoken; never say place names either — refer to places by order and distance.")
 
 _SHOWN_RX = re.compile(r"\[Shown:\s*([^\]]*)\]")

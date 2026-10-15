@@ -64,6 +64,9 @@ async def lifespan(app: FastAPI):
     logger.info("Model ready ✓")
     init_firebase()
     start_scheduler()
+    # the copilot's place index: manifest + national file in the background (never blocks startup)
+    from services import place_index
+    place_index.store().warm()
     yield
     logger.info("Shutting down...")
 
